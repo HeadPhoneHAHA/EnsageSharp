@@ -114,7 +114,7 @@ namespace InvokerNinja
             {
                 targetParticle = new ParticleEffect(@"particles\ui_mouseactions\range_finder_tower_aoe.vpcf", target);
             }
-            if(target == null || !target.IsVisible || !target.IsAlive)
+            if((target == null || !target.IsVisible || !target.IsAlive) && targetParticle != null)
             {
                 targetParticle.Dispose();
                 targetParticle = null;
@@ -503,7 +503,7 @@ namespace InvokerNinja
                 else if (skill.Name == emp.Name)
                 {
                     timing = 2.9 + (Game.Ping / 1000);
-                    timing_a = 1.5;
+                    timing_a = 0.6;
                 }
                 else if (skill.Name == blast.Name)
                 {
