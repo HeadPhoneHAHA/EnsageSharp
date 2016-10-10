@@ -1,0 +1,13 @@
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\InvokerNinja.exe.config
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\InvokerNinja.exe
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\InvokerNinja.pdb
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\Ensage.Common.dll
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\Ensage.dll
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\SharpDX.Direct3D9.dll
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\SharpDX.dll
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\EnsageSharp.Sandbox.dll
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\obj\x64\Debug\InvokerNinja.exe
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\obj\x64\Debug\InvokerNinja.pdb
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\Newtonsoft.Json.dll
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Debug\Ensage.Common.pdb
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\obj\x64\Debug\InvokerNinja.csprojResolveAssemblyReference.cache
