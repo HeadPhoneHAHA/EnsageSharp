@@ -38,70 +38,77 @@ namespace InvokerNinja
         }
         public static void orb_checker(EventArgs args)
         {
-            //if (!Game.IsInGame || Game.IsWatchingGame)
-            //    return;
-            //me = ObjectMgr.LocalHero;
-            //if (me == null || me.ClassID != ClassID.CDOTA_Unit_Hero_Invoker)
-            //    return;
-            ////quas, wex, exort checker
-            //if (me.Level <= 6)
-            //{
-            //    if (quas.Level >= 2)
-            //        quas_level = true;
-            //    else
-            //        quas_level = false;
-            //    if (wex.Level >= 2)
-            //        wex_level = true;
-            //    else
-            //        wex_level = false;
-            //    if (exort.Level >= 2)
-            //        exort_level = true;
-            //    else
-            //        exort_level = false;
-            //}
-            //else if (me.Level <= 25)
-            //{
-            //    if (quas.Level >= 4)
-            //        quas_level = true;
-            //    else
-            //        quas_level = false;
-            //    if (wex.Level >= 4)
-            //        wex_level = true;
-            //    else
-            //        wex_level = false;
-            //    if (exort.Level >= 4)
-            //        exort_level = true;
-            //    else
-            //        exort_level = false;
-            //}
-            //if(me.NetworkActivity == NetworkActivity.Attack)
-            //{
-            //    if (!me.Modifiers.Any(x => x.Name.Contains("exort")))
-            //    {
-            //        exort.UseAbility(false);
-            //        exort.UseAbility(false);
-            //        exort.UseAbility(false);
-            //        Utils.Sleep(1500, "attack1_time");
-            //    }
-            //}
-            //else if( me.Health < me.MaximumHealth *0.5)
-            //{
-            //    if (!me.Modifiers.Any(x => x.Name.Contains("quas")))
-            //    {
-            //        quas.UseAbility(false);
-            //        quas.UseAbility(false);
-            //        quas.UseAbility(false);
-            //    }
-            //}
-            //else if(me.Health > me.MaximumHealth *0.5)
-            //{
-            //        if (!me.Modifiers.Any(x => x.Name.Contains("wex")))
-            //        {
-            //            wex.UseAbility(false);
-            //            wex.UseAbility(false);
-            //            wex.UseAbility(false);
-            //        }
-            //}
+            if (!Game.IsInGame || Game.IsWatchingGame || Game.IsPaused)
+                return;
+            me = ObjectMgr.LocalHero;
+            if (me == null || me.ClassID != ClassID.CDOTA_Unit_Hero_Invoker)
+                return;
+            if (!Utils.SleepCheck("KEYPRESSED"))
+                return;
+            if (Game.IsKeyDown(Menu.Item("Flee Mode").GetValue<KeyBind>().Key) || Game.IsKeyDown(Menu.Item("Combo Mode").GetValue<KeyBind>().Key))
+                return;
+            //quas, wex, exort checker
+            if (Utils.SleepCheck("ORBSFIND2"))
+            {
+                quas = me.Spellbook.SpellQ;
+                wex = me.Spellbook.SpellW;
+                exort = me.Spellbook.SpellE;
+                Utils.Sleep(250, "ORBSFIND2");
+            }
+            if (me.Level <= 6)
+            {
+                if (quas.Level >= 2)
+                    quas_level = true;
+                else
+                    quas_level = false;
+                if (wex.Level >= 2)
+                    wex_level = true;
+                else
+                    wex_level = false;
+                if (exort.Level >= 2)
+                    exort_level = true;
+                else
+                    exort_level = false;
+            }
+            else if (me.Level <= 25)
+            {
+                if (quas.Level >= 4)
+                    quas_level = true;
+                else
+                    quas_level = false;
+                if (wex.Level >= 4)
+                    wex_level = true;
+                else
+                    wex_level = false;
+                if (exort.Level >= 4)
+                    exort_level = true;
+                else
+                    exort_level = false;
+            }
+            if(me.CanCast() && !me.IsChanneling() && !me.UnitState.HasFlag(UnitState.Invisible))
+            if (me.NetworkActivity.HasFlag(NetworkActivity.Attack) && ((me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && exort_level) || (me.Modifiers.Count(x => x.Name.Contains("wex")) < 3 && wex_level)) && Utils.SleepCheck("orbchange"))
+            {
+                if(exort_level)
+                {
+                    orb_type(exort);
+                    Utils.Sleep(2000, "orbchange");
+                }
+                else if(wex_level)
+                {
+                    orb_type(wex);
+                    Utils.Sleep(1200, "orbchange");
+                }
+            }
+            else if (me.Health < me.MaximumHealth * 0.90 && me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && quas_level && Utils.SleepCheck("orbchange"))
+            {
+                orb_type(quas);
+                Utils.Sleep(1200, "orbchange");
+            }
+            else if (me.Health >= me.MaximumHealth * 0.90 && wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+            {
+                orb_type(wex);
+                Utils.Sleep(1200, "orbchange");
+            }
         }
         public static void Target_esp(EventArgs args)
         {
@@ -119,7 +126,7 @@ namespace InvokerNinja
                 targetParticle.Dispose();
                 targetParticle = null;
             }
-            if (target != null)
+            if (target != null && targetParticle != null)
             {
                 targetParticle.SetControlPoint(2, me.Position);
                 targetParticle.SetControlPoint(6, new Vector3(1, 0, 0));
@@ -128,13 +135,19 @@ namespace InvokerNinja
         }
         public static void Exploding(EventArgs args)
         {
-            if (!Game.IsInGame || Game.IsWatchingGame)
+            if (!Game.IsInGame || Game.IsWatchingGame || Game.IsPaused)
                 return;
             me = ObjectMgr.LocalHero;
             if (me == null || me.ClassID != ClassID.CDOTA_Unit_Hero_Invoker)
                 return;
             //adicionar modifiers(mirana arrow...), adiocionar low hp < sunstrike_damage detector, adicionar target selector e moving separado
-
+            for (uint i = 48; i <= 90; i++)
+            {
+                if (Game.IsKeyDown(keyCode: i))
+                {
+                    Utils.Sleep(2000, "KEYPRESSED");
+                }
+            }
             if (Game.IsKeyDown(Menu.Item("Flee Mode").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
             {
                 if (Utils.SleepCheck("ORBSFIND"))
@@ -211,7 +224,7 @@ namespace InvokerNinja
                     malevolence = me.FindItem("item_orchid");
                     bloodthorn = me.FindItem("item_bloodthorn");
                     urn = me.FindItem("item_urn_of_shadows");
-                    Utils.Sleep(250, "ORBSFIND");
+                    Utils.Sleep(500, "ORBSFIND");
                 }
                 if (target != null && (!target.IsAlive || target.IsIllusion || distance_me_target > 3000 || !target.IsVisible))
                     target = null;
@@ -219,16 +232,20 @@ namespace InvokerNinja
                     target = me.BestAATarget(1000);
                 if (target != null && target.IsValid && !target.IsIllusion)
                 {
-                    distance_me_target = target.NetworkPosition.Distance2D(me.NetworkPosition);
-                    myunits = ObjectMgr.GetEntities<Unit>().Where(x => x.Team == me.Team && x.IsControllable && x != null && x.IsAlive && x.Distance2D(target) <= 2000 && x.IsControllable && x.IsValid).ToList();
-                    forge_in_my_side = ObjectMgr.GetEntities<Unit>().Where(x => x.Team == me.Team && x.IsControllable && x != null && x.IsAlive && x.Distance2D(target) <= 700 && x.Name.Contains("npc_dota_invoker_forged_spirit") && x.IsValid).Any();
-                    ice_wall_distance = me.InFront(120).Distance2D(target.Position) <= 300;
-                    target_magic_imune = target.IsMagicImmune();
-                    target_isinvul = target.IsInvul();
-                    target_blast_ontiming = IsOnTiming(blast);
-                    target_meteor_ontiming = IsOnTiming(meteor);
-                    target_emp_ontiming = IsOnTiming(emp);
-                    target_sunstrike_ontiming = IsOnTiming(sunstrike);
+                    if (Utils.SleepCheck("Variable Checker"))
+                    {
+                        distance_me_target = target.NetworkPosition.Distance2D(me.NetworkPosition);
+                        myunits = ObjectMgr.GetEntities<Unit>().Where(x => x.Team == me.Team && x.IsControllable && x != null && x.IsAlive && x.Distance2D(target) <= 2000 && x.IsControllable && x.IsValid).ToList();
+                        forge_in_my_side = ObjectMgr.GetEntities<Unit>().Where(x => x.Team == me.Team && x.IsControllable && x != null && x.IsAlive && x.Distance2D(target) <= 700 && x.Name.Contains("npc_dota_invoker_forged_spirit") && x.IsValid).Any();
+                        ice_wall_distance = me.InFront(120).Distance2D(target.Position) <= 300;
+                        target_magic_imune = target.IsMagicImmune();
+                        target_isinvul = target.IsInvul();
+                        target_blast_ontiming = IsOnTiming(blast);
+                        target_meteor_ontiming = IsOnTiming(meteor);
+                        target_emp_ontiming = IsOnTiming(emp);
+                        target_sunstrike_ontiming = IsOnTiming(sunstrike);
+                        Utils.Sleep(500, "Variable Checker");
+                    }
                     if ((quas.Level > 0 || wex.Level > 0 || exort.Level > 0) && invoke.Level >= 1)
                     {
                         if (IsComboPrepared() != 0 || comboing)
@@ -252,7 +269,7 @@ namespace InvokerNinja
                                     // me.Attack(target, false);
                                     Utils.Sleep(200, "orbwalker");
                                 }
-                                if (eul.CanBeCasted() && Utils.SleepCheck("eul"))
+                                if (eul.CanBeCasted() && Utils.SleepCheck("eul") && sunstrike.Cooldown == 0 && meteor.Cooldown == 0 && !target_meteor_ontiming && !target_sunstrike_ontiming)
                                 {
                                     eul.UseAbility(target,false);
                                     Utils.Sleep(800, "eul");
@@ -392,8 +409,13 @@ namespace InvokerNinja
                             }
                             if(nextskillvalue == 0 && Utils.SleepCheck("moving_idle"))
                                 {
+                                    if (me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+                                    {
+                                        orb_type(wex);
+                                        Utils.Sleep(900, "orbchange");
+                                    }
                                     me.Move(Game.MousePosition, false);
-                                    Utils.Sleep(600, "moving_idle");
+                                    Utils.Sleep(300, "moving_idle");
                                 }
                             //// modifier_invoker_deafining_blast_knockback
                             //// modifier_invoker_tornado
@@ -433,6 +455,16 @@ namespace InvokerNinja
                     }
                     if (Utils.SleepCheck("orbwalker"))
                     {
+                        if (exort_level && me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && Utils.SleepCheck("orbchange"))
+                        {
+                            orb_type(exort);
+                            Utils.Sleep(800, "orbchange");
+                        }
+                        else if (wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+                        {
+                            orb_type(wex);
+                            Utils.Sleep(900, "orbchange");
+                        }
                         Orbwalking.Orbwalk(target);
                        // me.Attack(target, false);
                         Utils.Sleep(200, "orbwalker");
@@ -464,8 +496,13 @@ namespace InvokerNinja
                 {
                     if (Utils.SleepCheck("moving_idle"))
                     {
+                        if (me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+                        {
+                            orb_type(wex);
+                            Utils.Sleep(900, "orbchange");
+                        }
                         me.Move(Game.MousePosition, false);
-                        Utils.Sleep(600, "moving_idle");
+                        Utils.Sleep(300, "moving_idle");
                     }
                 }
             }
@@ -475,7 +512,7 @@ namespace InvokerNinja
             // combo 1 - > euls -> meteor -> sunstrike -> defineblast
             // combo 2 -> emp -> tornado
             // //combo 3 -> meteor -> tornado
-            if (Iscasted(meteor) && Iscasted(sunstrike) && sunstrike.Cooldown == 0 && meteor.Cooldown == 0 && me.FindItem("item_cyclone") != null)
+            if (Iscasted(meteor) && Iscasted(sunstrike) && sunstrike.Cooldown == 0 && meteor.Cooldown == 0 && (me.FindItem("item_cyclone") != null || (target_meteor_ontiming && target_sunstrike_ontiming)))
                 return 1;
             //if (Iscasted(emp) && Iscasted(tornado) && emp.Cooldown == 0 && tornado.Cooldown == 0)
             //    return 2;
@@ -519,6 +556,10 @@ namespace InvokerNinja
                 else if (target.HasModifier("modifier_obsidian_destroyer_astral_imprisonment_prison") && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_obsidian_destroyer_astral_imprisonment_prison").RemainingTime <= timing) && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_obsidian_destroyer_astral_imprisonment_prison").RemainingTime > timing_a))
                     return true;
                 else if (target.HasModifier("modifier_invoker_cold_snap") && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_invoker_cold_snap").RemainingTime > timing_a))
+                    return true;
+                else if (target.HasModifier("modifier_stunned") && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_stunned").RemainingTime > timing_a))
+                    return true;
+                else if (target.HasModifier("modifier_windrunner_shackle_shot") && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_windrunner_shackle_shot").RemainingTime > timing_a))
                     return true;
                 else if (target.HasModifier("modifier_shadow_demon_disruption") && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_shadow_demon_disruption").RemainingTime <= timing) && (target.Modifiers.FirstOrDefault(x => x.Name == "modifier_shadow_demon_disruption").RemainingTime > timing_a))
                     return true;
