@@ -25,7 +25,7 @@ namespace InvokerNinja
         private static Hero me, target, EnemykillablebySS;
         private static uint nextskillvalue, combonumber, nextskillflee = 0;
         private static Ability quas, wex, exort, invoke, coldsnap, meteor, alacrity, tornado, forgespirit, blast, sunstrike, emp, icewall, ghostwalk;
-        private static Item eul, medallion, solar_crest, malevolence, bloodthorn, urn;
+        private static Item eul, medallion, solar_crest, malevolence, bloodthorn, urn, vyse;
         private static bool comboing = false, target_magic_imune, target_isinvul, target_meteor_ontiming, target_emp_ontiming, target_sunstrike_ontiming, target_blast_ontiming, quas_level, exort_level, wex_level, forge_in_my_side, ice_wall_distance;
         private static float distance_me_target, targetisturning_delay = -777;
         private static ParticleEffect targetParticle;
@@ -96,11 +96,9 @@ namespace InvokerNinja
                 else
                     exort_level = false;
             }
-            if (me.CanCast() && !me.IsChanneling() && !me.UnitState.HasFlag(UnitState.Invisible))
+            if (me.CanCast() && !me.IsChanneling() && !me.UnitState.HasFlag(UnitState.Invisible) && Utils.SleepCheck("KEYPRESSED"))
                 if (me.NetworkActivity.HasFlag(NetworkActivity.Attack) && ((me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && exort_level) || (me.Modifiers.Count(x => x.Name.Contains("wex")) < 3 && wex_level)) && Utils.SleepCheck("orbchange"))
                 {
-                    if (!Utils.SleepCheck("KEYPRESSED"))
-                        return;
                     if (exort_level)
                     {
                         orb_type(exort);
@@ -272,6 +270,7 @@ namespace InvokerNinja
                     medallion = me.FindItem("item_medallion_of_courage");
                     solar_crest = me.FindItem("item_solar_crest");
                     malevolence = me.FindItem("item_orchid");
+                    vyse = me.FindItem("item_sheepstick");
                     bloodthorn = me.FindItem("item_bloodthorn");
                     urn = me.FindItem("item_urn_of_shadows");
                     Utils.Sleep(500, "ORBSFIND");
@@ -403,7 +402,7 @@ namespace InvokerNinja
                                     {
                                         tornado.UseAbility(Prediction.PredictedXYZ(target, (distance_me_target / 1100 * 1000) + target.MovementSpeed), false);
                                         Utils.Sleep(250, "cd_tornado");
-                                        Utils.Sleep(850, "cd_tornado_a");
+                                        Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "cd_tornado_a");
                                     }
                                 }
                                 if (nextskillvalue == 5 && Utils.SleepCheck("cd_forgespirit"))
@@ -493,6 +492,12 @@ namespace InvokerNinja
                         malevolence.UseAbility(target, false);
                         Utils.Sleep(500, "male");
                         Utils.Sleep(5000, "malepop");
+                    }
+                    if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
+                    {
+                        vyse.UseAbility(target, false);
+                        Utils.Sleep(500, "vyse");
+                        Utils.Sleep(3500, "vysepop");
                     }
                     if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
                     {
@@ -719,6 +724,8 @@ namespace InvokerNinja
             // 1 - coldsnap, 2- meteor, 3 - alacrity, 4 - tornado, 5 -forgespirit, 6 -blast, 7 - sunstrike(off), 8 - emp, 9 - icewall, 10 - sunstrike
             try
             {
+                if (!Utils.SleepCheck("cd_tornado_a"))
+                    return 0;
                 if (Iscasted(coldsnap) && coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune)
                     return 1;
                 if (Iscasted(forgespirit) && forgespirit.CanBeCasted() && distance_me_target <= 600 && !target_isinvul && !forge_in_my_side)
@@ -729,9 +736,9 @@ namespace InvokerNinja
                     return 9;
                 if (Iscasted(blast) && blast.CanBeCasted() && distance_me_target <= 600 && (!target_isinvul || target_blast_ontiming))
                     return 6;
-                if (Iscasted(tornado) && tornado.CanBeCasted() && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop"))
+                if (Iscasted(tornado) && tornado.CanBeCasted() && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop") && Utils.SleepCheck("vysepop"))
                     return 4;
-                if (Iscasted(meteor) && meteor.CanBeCasted() && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700 && Utils.SleepCheck("cd_tornado_a"))
+                if (Iscasted(meteor) && meteor.CanBeCasted() && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700)
                     return 2;
                 if (Iscasted(sunstrike) && sunstrike.CanBeCasted() && (target.MovementSpeed < 200 || target_sunstrike_ontiming))
                     return 10;
@@ -807,15 +814,15 @@ namespace InvokerNinja
                     return 3;
                 if (quas_level && icewall.Cooldown == 0 && !target_magic_imune && ice_wall_distance)
                     return 9;
-                if (wex_level && tornado.Cooldown == 0 && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("cd_meteor_a") && Utils.SleepCheck("cd_blast_a") && Utils.SleepCheck("cd_emp_a") && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop"))
+                if (wex_level && tornado.Cooldown == 0 && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("cd_meteor_a") && Utils.SleepCheck("cd_blast_a") && Utils.SleepCheck("cd_emp_a") && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop") && Utils.SleepCheck("vysepop"))
                     return 4;
-                if (exort_level && meteor.Cooldown == 0 && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700 && Utils.SleepCheck("cd_tornado_a"))
+                if (exort_level && meteor.Cooldown == 0 && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700)
                     return 2;
-                if (exort_level && sunstrike.Cooldown == 0 && (target.MovementSpeed < 200 || target_sunstrike_ontiming) && Utils.SleepCheck("cd_tornado_a") && me.AttackSpeedValue >= 150)
+                if (exort_level && sunstrike.Cooldown == 0 && (target.MovementSpeed < 200 || target_sunstrike_ontiming) && me.AttackSpeedValue >= 150)
                     return 10;
-                if ((exort_level || quas_level || wex_level) && blast.Cooldown == 0 && !target_magic_imune && distance_me_target <= 950 && !target_isinvul && Utils.SleepCheck("cd_tornado_a"))
+                if ((exort_level || quas_level || wex_level) && blast.Cooldown == 0 && !target_magic_imune && distance_me_target <= 950 && !target_isinvul)
                     return 6;
-                if (wex_level && emp.Cooldown == 0 && (target.MovementSpeed <= 190 || target_emp_ontiming) && Utils.SleepCheck("cd_tornado_a") && distance_me_target <= 700 && (target.Mana > target.MaximumMana * 0.35))
+                if (wex_level && emp.Cooldown == 0 && (target.MovementSpeed <= 190 || target_emp_ontiming) && distance_me_target <= 700 && (target.Mana > target.MaximumMana * 0.35))
                     return 8;
 
                 return 0;
