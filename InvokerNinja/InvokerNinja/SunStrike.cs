@@ -806,23 +806,23 @@ namespace InvokerNinja
                         exort_level = false;
                 }
                 //skills sequence
-                if (quas_level && coldsnap.Cooldown == 0 && distance_me_target <= 750 && !target_isinvul && !target_magic_imune)
+                if (quas_level && coldsnap.Cooldown == 0 && distance_me_target <= 750 && !target_isinvul && !target_magic_imune && quas.Level > 0)
                     return 1;
-                if (exort_level && forgespirit.Cooldown == 0 && distance_me_target <= 600 && !target_isinvul && !forge_in_my_side)
+                if (exort_level && forgespirit.Cooldown == 0 && distance_me_target <= 600 && !target_isinvul && !forge_in_my_side && quas.Level > 0 && exort.Level > 0)
                     return 5;
-                if ((exort_level || wex_level) && alacrity.Cooldown == 0 && distance_me_target <= 600 && !target_isinvul)
+                if ((exort_level || wex_level) && alacrity.Cooldown == 0 && distance_me_target <= 600 && !target_isinvul && exort.Level > 0 && wex.Level > 0)
                     return 3;
-                if (quas_level && icewall.Cooldown == 0 && !target_magic_imune && ice_wall_distance)
+                if (quas_level && icewall.Cooldown == 0 && !target_magic_imune && ice_wall_distance && quas.Level > 0 && exort.Level > 0)
                     return 9;
-                if (wex_level && tornado.Cooldown == 0 && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("cd_meteor_a") && Utils.SleepCheck("cd_blast_a") && Utils.SleepCheck("cd_emp_a") && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop") && Utils.SleepCheck("vysepop"))
+                if (wex_level && tornado.Cooldown == 0 && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("cd_meteor_a") && Utils.SleepCheck("cd_blast_a") && Utils.SleepCheck("cd_emp_a") && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop") && Utils.SleepCheck("vysepop") && quas.Level > 0 && wex.Level > 0)
                     return 4;
-                if (exort_level && meteor.Cooldown == 0 && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700)
+                if (exort_level && meteor.Cooldown == 0 && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700 && wex.Level > 0 && exort.Level > 0)
                     return 2;
-                if (exort_level && sunstrike.Cooldown == 0 && (target.MovementSpeed < 200 || target_sunstrike_ontiming) && me.AttackSpeedValue >= 150)
+                if (exort_level && sunstrike.Cooldown == 0 && (target.MovementSpeed < 200 || target_sunstrike_ontiming) && me.AttackSpeedValue >= 150 && exort.Level > 0)
                     return 10;
-                if ((exort_level || quas_level || wex_level) && blast.Cooldown == 0 && !target_magic_imune && distance_me_target <= 950 && !target_isinvul)
+                if ((exort_level || quas_level || wex_level) && blast.Cooldown == 0 && !target_magic_imune && distance_me_target <= 950 && !target_isinvul && exort.Level > 0 && quas.Level > 0 && wex.Level > 0)
                     return 6;
-                if (wex_level && emp.Cooldown == 0 && (target.MovementSpeed <= 190 || target_emp_ontiming) && distance_me_target <= 700 && (target.Mana > target.MaximumMana * 0.35))
+                if (wex_level && emp.Cooldown == 0 && (target.MovementSpeed <= 190 || target_emp_ontiming) && distance_me_target <= 700 && (target.Mana > target.MaximumMana * 0.35) && wex.Level > 0)
                     return 8;
 
                 return 0;
