@@ -20,9 +20,10 @@ namespace InvokerNinja
         private static int OrbMinDist => Menu.Item("orbwalk.minDistance").GetValue<Slider>().Value;
         private static int SunstrikeTimeConfig => Menu.Item("sunstrike.timeconfig").GetValue<Slider>().Value;
         private static int SunstrikeTimeConfig2 => Menu.Item("sunstrike.timeconfig2").GetValue<Slider>().Value;
+        private static int quasthreshold => Menu.Item("quas threshold health").GetValue<Slider>().Value;
         private static int starttickcount, currenttickcount;
         private static Dictionary<int, int> TurntimeOntick = new Dictionary<int, int> { };
-        private static Hero me, target, EnemykillablebySS;
+        private static Hero me, target, EnemykillablebySS, DisabledEnemy;
         private static uint nextskillvalue, combonumber, nextskillflee = 0;
         private static Ability quas, wex, exort, invoke, coldsnap, meteor, alacrity, tornado, forgespirit, blast, sunstrike, emp, icewall, ghostwalk;
         private static Item eul, medallion, solar_crest, malevolence, bloodthorn, urn, vyse;
@@ -36,11 +37,16 @@ namespace InvokerNinja
             Menu.AddItem(new MenuItem("Flee Mode", "Flee Mode").SetValue(new KeyBind('U', KeyBindType.Press)));
             Menu.AddItem(new MenuItem("Target Select", "Target Select").SetValue(new KeyBind('G', KeyBindType.Press)));
             var SunstrikeMenu = new Menu("Sunstrike", "AutoSunstrike");
+            var orbmenu = new Menu("OrbChanging", "Orb Menu");
             Menu.AddSubMenu(SunstrikeMenu);
+            Menu.AddSubMenu(orbmenu);
+            orbmenu.AddItem(new MenuItem("Enable OrbChanging", "Enable OrbChanging").SetValue(true).SetTooltip("Enable/Disable automatic orb Changing."));
+            orbmenu.AddItem(new MenuItem("quas threshold health", "Quas Threshold Health").SetValue(new Slider(90, 1, 100)).SetTooltip("Percentage of HP threshold to change orbs for quas while not attacking."));
             SunstrikeMenu.AddItem(new MenuItem("Enable AutoSunstrike", "Enable AutoSunstrike").SetValue(true));
             SunstrikeMenu.AddItem(new MenuItem("Sunstrike Onlywhensafe", "Sunstrike Onlywhensafe").SetValue(true).SetTooltip("Just send sunstrike when is safe (target stunned,euls timing, skills timing..)."));
+            SunstrikeMenu.AddItem(new MenuItem("Sunstrike Always When Disabled", "Sunstrike Always When Disabled").SetValue(true).SetTooltip("It will always send sunstrike in disabled targets, doesn't matter if it isn't low HP."));
             SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig", "Sunstrike Delay").SetValue(new Slider(300, 100, 1000)).SetTooltip("Wait enemy walk in straight line delay."));
-            SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig2", "First Vision Delay").SetValue(new Slider(2500, 500, 3000)).SetTooltip("Time to wait before start to prepair sunstrike."));
+            SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig2", "First Vision Delay").SetValue(new Slider(2500, 500, 3000)).SetTooltip("Time to wait before start to calculate sunstrike.(it's good because when target lose his HP he may change the place where he is going.)"));
             Menu.AddItem(new MenuItem("orbwalk.minDistance", "Orbwalk min distance").SetValue(new Slider(250, 0, 700)).SetTooltip("the min distance to stop orbwalking and just auto attack."));
             Menu.AddToMainMenu();
             Game.OnWndProc += Exploding;
@@ -95,31 +101,36 @@ namespace InvokerNinja
                 else
                     exort_level = false;
             }
-            if (me.CanCast() && !me.IsChanneling() && !me.UnitState.HasFlag(UnitState.Invisible) && Utils.SleepCheck("KEYPRESSED"))
-                if (me.NetworkActivity.HasFlag(NetworkActivity.Attack) && ((me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && exort_level) || (me.Modifiers.Count(x => x.Name.Contains("wex")) < 3 && wex_level)) && Utils.SleepCheck("orbchange"))
+            if (me.CanCast() && !me.IsChanneling() && !me.UnitState.HasFlag(UnitState.Invisible) && Utils.SleepCheck("KEYPRESSED") && Menu.Item("Enable OrbChanging").GetValue<bool>())
+            {
+                if ((me.NetworkActivity.HasFlag(NetworkActivity.Attack) || me.NetworkActivity.HasFlag(NetworkActivity.Attack2) || me.NetworkActivity.HasFlag(NetworkActivity.AttackEvent)) && ((me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && exort_level) || (me.Modifiers.Count(x => x.Name.Contains("wex")) < 3 && wex_level)) && Utils.SleepCheck("orbchange"))
                 {
                     if (exort_level)
                     {
                         orb_type(exort);
-                        Utils.Sleep(800, "orbchange");
+                        Utils.Sleep(400, "orbchange");
                     }
                     else if (wex_level)
                     {
                         orb_type(wex);
-                        Utils.Sleep(800, "orbchange");
+                        Utils.Sleep(400, "orbchange");
                     }
+                    Utils.Sleep(900, "orbchange2");
                 }
-                else if (me.Health < me.MaximumHealth * 0.90 && me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && quas_level && Utils.SleepCheck("orbchange"))
+                else if (me.Health < me.MaximumHealth * ((float)quasthreshold / 100) && me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && quas_level && Utils.SleepCheck("orbchange") && Utils.SleepCheck("orbchange2"))
                 {
                     orb_type(quas);
-                    Utils.Sleep(800, "orbchange");
+                    Utils.Sleep(400, "orbchange");
                 }
-                else if (me.Health >= me.MaximumHealth * 0.90 && wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+                else if (me.Health >= me.MaximumHealth * ((float)quasthreshold / 100) && wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange") && Utils.SleepCheck("orbchange2"))
                 {
                     orb_type(wex);
-                    Utils.Sleep(800, "orbchange");
+                    Utils.Sleep(400, "orbchange");
                 }
-            if (Menu.Item("Enable AutoSunstrike").GetValue<bool>())
+                if (me.NetworkActivity.HasFlag(NetworkActivity.Attack) || me.NetworkActivity.HasFlag(NetworkActivity.Attack2) || me.NetworkActivity.HasFlag(NetworkActivity.AttackEvent))
+                    Utils.Sleep(900, "orbchange2");
+            }
+            if (Menu.Item("Enable AutoSunstrike").GetValue<bool>() && !me.IsChanneling() && !me.IsInvisible())
             {
                 currenttickcount = Environment.TickCount - starttickcount;
                 if (Utils.SleepCheck("Sunstrikefinder"))
@@ -132,21 +143,24 @@ namespace InvokerNinja
                 if (me.AghanimState())
                     Sunstrikedamage += 62.5;
                 EnemykillablebySS = ObjectManager.GetEntities<Hero>().FirstOrDefault(x => x.IsValid && x.Team != me.Team && !x.IsIllusion && x.IsAlive && x.Health <= Sunstrikedamage);
-                if (EnemykillablebySS != null && sunstrike != null && sunstrike.Cooldown == 0 && exort.Level > 0)
+                DisabledEnemy = ObjectManager.GetEntities<Hero>().FirstOrDefault(x => x.IsValid && x.Team != me.Team && !x.IsIllusion && x.IsAlive && IsOnTiming(sunstrike, x) && !x.HasModifier("modifier_invoker_cold_snap"));
+                if (((EnemykillablebySS != null || (DisabledEnemy != null && Menu.Item("Sunstrike Always When Disabled").GetValue<bool>())) && sunstrike != null && sunstrike.Cooldown == 0 && exort.Level > 0))
                 {
+                    if (EnemykillablebySS == null)
+                        EnemykillablebySS = DisabledEnemy;
                     if (IsOnTiming(sunstrike, EnemykillablebySS))
                     {
-                        if (sunstrike.Cooldown == 0 && me.Mana > sunstrike.ManaCost && invoke.CanBeCasted() && Utils.SleepCheck("cd_sunstrike"))
+                        if (sunstrike.Cooldown == 0 && (Iscasted(sunstrike) ? me.Mana > sunstrike.ManaCost : me.Mana > (sunstrike.ManaCost + invoke.ManaCost)) && invoke.CanBeCasted() && Utils.SleepCheck("cd_sunstrike"))
                         {
                             InvokeSkill(sunstrike);
-                            sunstrike.UseAbility(EnemykillablebySS.Position, false);
+                            sunstrike.UseAbility(Prediction.PredictedXYZ(EnemykillablebySS, (float)(1700 / 3.4) + EnemykillablebySS.MovementSpeed), false);
                             Utils.Sleep(250, "cd_sunstrike");
                             Utils.Sleep(700, "cd_sunstrike_a");
                         }
                     }
                     else if (!Menu.Item("Sunstrike Onlywhensafe").GetValue<bool>())
                     {
-                        if (sunstrike.Cooldown == 0 && me.Mana > sunstrike.ManaCost && invoke.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && TargetIsTurning(EnemykillablebySS) && !EnemykillablebySS.IsInvul())
+                        if (sunstrike.Cooldown == 0 && (Iscasted(sunstrike) ? me.Mana > sunstrike.ManaCost : me.Mana > (sunstrike.ManaCost + invoke.ManaCost)) && invoke.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && TargetIsTurning(EnemykillablebySS) && !EnemykillablebySS.IsInvul())
                         {
                             InvokeSkill(sunstrike);
                             sunstrike.UseAbility(Prediction.PredictedXYZ(EnemykillablebySS, (float)(1700 / 1.2) + EnemykillablebySS.MovementSpeed), false);
@@ -225,7 +239,7 @@ namespace InvokerNinja
                         }
                         if ((me.Health / (float)me.MaximumHealth) <= 0.5)
                         {
-                            if(!me.HasModifier("modifier_invoker_ghost_walk_self"))
+                            if (!me.HasModifier("modifier_invoker_ghost_walk_self"))
                                 orb_type(quas);
                         }
                         else
@@ -233,7 +247,7 @@ namespace InvokerNinja
                             if (!me.HasModifier("modifier_invoker_ghost_walk_self"))
                                 orb_type(wex);
                         }
-                        if(me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && exort_level || (me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && exort_level))
+                        if (me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && exort_level || (me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && exort_level))
                             ghostwalk.UseAbility(false);
                         Utils.Sleep(500, "ghostwalk");
                     }
@@ -420,7 +434,7 @@ namespace InvokerNinja
                             }
                             if (combonumber == 2)
                             {
-                                bool invokecd = ((invoke.Level == 4 && me.FindItem("item_octarine_core") != null)||(invoke.Level == 3 && me.AghanimState()) || (invoke.Level == 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState());
+                                bool invokecd = ((invoke.Level == 4 && me.FindItem("item_octarine_core") != null) || (invoke.Level >= 3 && me.AghanimState()) || (invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState());
                                 if (Utils.SleepCheck("orbwalker"))
                                 {
                                     if (me.Distance2D(target) >= OrbMinDist)
@@ -517,7 +531,7 @@ namespace InvokerNinja
                             }
                             if (combonumber == 3)
                             {
-                                bool invokecd = ((invoke.Level == 4 && me.FindItem("item_octarine_core") != null) || (invoke.Level == 3 && me.AghanimState()) || (invoke.Level == 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState());
+                                bool invokecd = ((invoke.Level == 4 && me.FindItem("item_octarine_core") != null) || (invoke.Level >= 3 && me.AghanimState()) || (invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState());
                                 if (Utils.SleepCheck("orbwalker"))
                                 {
                                     if (me.Distance2D(target) >= OrbMinDist)
@@ -1004,7 +1018,7 @@ namespace InvokerNinja
             {
                 if (!Utils.SleepCheck("cd_tornado_a"))
                     return 0;
-                if (Iscasted(coldsnap) && coldsnap.CanBeCasted() && (distance_me_target <= 750 || (me.MovementSpeed >= target.MovementSpeed+30 && distance_me_target <= 900)) && !target_isinvul && !target_magic_imune)
+                if (Iscasted(coldsnap) && coldsnap.CanBeCasted() && (distance_me_target <= 750 || (me.MovementSpeed >= target.MovementSpeed + 30 && distance_me_target <= 900)) && !target_isinvul && !target_magic_imune)
                     return 1;
                 if (Iscasted(forgespirit) && forgespirit.CanBeCasted() && distance_me_target <= 600 && !target_isinvul && !forge_in_my_side)
                     return 5;
