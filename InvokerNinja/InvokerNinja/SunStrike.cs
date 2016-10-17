@@ -20,22 +20,35 @@ namespace InvokerNinja
         private static int OrbMinDist => Menu.Item("orbwalk.minDistance").GetValue<Slider>().Value;
         private static int SunstrikeTimeConfig => Menu.Item("sunstrike.timeconfig").GetValue<Slider>().Value;
         private static int SunstrikeTimeConfig2 => Menu.Item("sunstrike.timeconfig2").GetValue<Slider>().Value;
+        private static int SunstrikeMinHP => Menu.Item("Minimum amount of health for sunstrike").GetValue<Slider>().Value;
         private static int quasthreshold => Menu.Item("quas threshold health").GetValue<Slider>().Value;
         private static int starttickcount, currenttickcount;
         private static Dictionary<int, int> TurntimeOntick = new Dictionary<int, int> { };
         private static Hero me, target, EnemykillablebySS, DisabledEnemy;
         private static uint nextskillvalue, combonumber, nextskillflee = 0;
         private static Ability quas, wex, exort, invoke, coldsnap, meteor, alacrity, tornado, forgespirit, blast, sunstrike, emp, icewall, ghostwalk;
-        private static Item eul, medallion, solar_crest, malevolence, bloodthorn, urn, vyse;
-        private static bool comboing = false, target_magic_imune, target_isinvul, target_meteor_ontiming, target_emp_ontiming, target_sunstrike_ontiming, target_blast_ontiming, quas_level, exort_level, wex_level, forge_in_my_side, ice_wall_distance;
+        private static Item eul, medallion, solar_crest, malevolence, bloodthorn, urn, vyse, refresher, ethereal, dagon;
+        private static bool comboing = false, target_magic_imune, target_isinvul, target_meteor_ontiming, target_emp_ontiming, target_sunstrike_ontiming, target_blast_ontiming, quas_level, exort_level, wex_level, forge_in_my_side, ice_wall_distance, refresher_use = false;
         private static float distance_me_target, targetisturning_delay = -777;
         private static ParticleEffect targetParticle;
         private static List<Unit> myunits;
-        static void Main(string[] args) // ADDED SUPPORT FOR DISMEMBER,CRONO, DUEL..
+        // Update Version 1.0.0.8
+        // > Added Modifiers: shadow_shaman shackles, axe berserkers call, bane ultimate
+        // > Fixed a bug with: sunstrike,meteor,blast combo when sunstrike was automatic launched.
+        // > FIX combo's timings.
+        // > Minimum amount of health for sunstrike: this option works for Always when disabled option.
+        // > Target type: closest to mouse / Target Select G
+        // > to make sunstrike more accurate increase Sunstrike Delay
+        // > Fixed bug with combos.
+        // > Added refresher, dagon, ethereal for combos.
+        // > fixed misscast on combos
+        static void Main(string[] args)
         {
             Menu.AddItem(new MenuItem("Combo Mode", "Combo Mode").SetValue(new KeyBind('T', KeyBindType.Press)));
             Menu.AddItem(new MenuItem("Flee Mode", "Flee Mode").SetValue(new KeyBind('U', KeyBindType.Press)));
-            Menu.AddItem(new MenuItem("Target Select", "Target Select").SetValue(new KeyBind('G', KeyBindType.Press)));
+            Menu.AddItem(new MenuItem("Target Type: ", "Target Type: ").SetValue(new StringList(new[] { "Target Selector", "Closest to mouse" }))).SetTooltip("On target selector you can get a better position while comboing. but closest to mouse is more easier");
+            if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 0)
+                Menu.AddItem(new MenuItem("Target Select", "Target Select").SetValue(new KeyBind('G', KeyBindType.Press)));
             var SunstrikeMenu = new Menu("Sunstrike", "AutoSunstrike");
             var orbmenu = new Menu("OrbChanging", "Orb Menu");
             Menu.AddSubMenu(SunstrikeMenu);
@@ -44,9 +57,10 @@ namespace InvokerNinja
             orbmenu.AddItem(new MenuItem("quas threshold health", "Quas Threshold Health").SetValue(new Slider(90, 1, 100)).SetTooltip("Percentage of HP threshold to change orbs for quas while not attacking."));
             SunstrikeMenu.AddItem(new MenuItem("Enable AutoSunstrike", "Enable AutoSunstrike").SetValue(true));
             SunstrikeMenu.AddItem(new MenuItem("Sunstrike Onlywhensafe", "Sunstrike Onlywhensafe").SetValue(true).SetTooltip("Just send sunstrike when is safe (target stunned,euls timing, skills timing..)."));
-            SunstrikeMenu.AddItem(new MenuItem("Sunstrike Always When Disabled", "Sunstrike Always When Disabled").SetValue(true).SetTooltip("It will always send sunstrike in disabled targets, doesn't matter if it isn't low HP."));
-            SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig", "Sunstrike Delay").SetValue(new Slider(300, 100, 1000)).SetTooltip("Wait enemy walk in straight line delay."));
+            SunstrikeMenu.AddItem(new MenuItem("Sunstrike Always When Disabled", "Sunstrike Always When Disabled").SetValue(true).SetTooltip("It will always send sunstrike when target has minus health than minimum amount of health configured."));
+            SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig", "Sunstrike Delay").SetValue(new Slider(600, 100, 3000)).SetTooltip("Wait enemy walk in straight line delay. It will make sunstrike more accurate."));
             SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig2", "First Vision Delay").SetValue(new Slider(2500, 500, 3000)).SetTooltip("Time to wait before start to calculate sunstrike.(it's good because when target lose his HP he may change the place where he is going.)"));
+            SunstrikeMenu.AddItem(new MenuItem("Minimum amount of health for sunstrike", "Minimum amount of health for sunstrike").SetValue(new Slider(300, 100, 1000)).SetTooltip("This value will be summed with sunstrike damage value."));
             Menu.AddItem(new MenuItem("orbwalk.minDistance", "Orbwalk min distance").SetValue(new Slider(250, 0, 700)).SetTooltip("the min distance to stop orbwalking and just auto attack."));
             Menu.AddToMainMenu();
             Game.OnWndProc += Exploding;
@@ -143,7 +157,7 @@ namespace InvokerNinja
                 if (me.AghanimState())
                     Sunstrikedamage += 62.5;
                 EnemykillablebySS = ObjectManager.GetEntities<Hero>().FirstOrDefault(x => x.IsValid && x.Team != me.Team && !x.IsIllusion && x.IsAlive && x.Health <= Sunstrikedamage);
-                DisabledEnemy = ObjectManager.GetEntities<Hero>().FirstOrDefault(x => x.IsValid && x.Team != me.Team && !x.IsIllusion && x.IsAlive && IsOnTiming(sunstrike, x) && !x.HasModifier("modifier_invoker_cold_snap"));
+                DisabledEnemy = ObjectManager.GetEntities<Hero>().FirstOrDefault(x => x.IsValid && x.Team != me.Team && !x.IsIllusion && x.IsAlive && IsOnTiming(sunstrike, x) && !x.HasModifier("modifier_invoker_cold_snap") && x.Health <= Sunstrikedamage + SunstrikeMinHP);
                 if (((EnemykillablebySS != null || (DisabledEnemy != null && Menu.Item("Sunstrike Always When Disabled").GetValue<bool>())) && sunstrike != null && sunstrike.Cooldown == 0 && exort.Level > 0))
                 {
                     if (EnemykillablebySS == null)
@@ -227,7 +241,7 @@ namespace InvokerNinja
                 if (me.CanMove() || me.CanCast())
                 {
                     nextskillflee = NextSkillFlee();
-                    if (nextskillflee == 1 && Utils.SleepCheck("ghostwalk"))
+                    if (nextskillflee == 1)
                     {
                         if (!Iscasted(ghostwalk) && invoke.CanBeCasted() && Utils.SleepCheck("ghostcast"))
                         {
@@ -239,17 +253,22 @@ namespace InvokerNinja
                         }
                         if ((me.Health / (float)me.MaximumHealth) <= 0.5)
                         {
-                            if (!me.HasModifier("modifier_invoker_ghost_walk_self"))
+                            if (!me.HasModifier("modifier_invoker_ghost_walk_self") && me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && quas.Level > 0 && Utils.SleepCheck("ORBGHOST"))
+                            {
                                 orb_type(quas);
+                                Utils.Sleep(250, "ORBGHOST");
+                            }
                         }
                         else
                         {
-                            if (!me.HasModifier("modifier_invoker_ghost_walk_self"))
+                            if (!me.HasModifier("modifier_invoker_ghost_walk_self") && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && wex.Level > 0 && Utils.SleepCheck("ORBGHOST"))
+                            {
                                 orb_type(wex);
+                                Utils.Sleep(250, "ORBGHOST");
+                            }
                         }
-                        if (me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && exort_level || (me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && exort_level))
+                        if (Utils.SleepCheck("ORBGHOST") && (me.Modifiers.Count(x => x.Name.Contains("wex")) >= 4 || me.Modifiers.Count(x => x.Name.Contains("quas")) >= 4))
                             ghostwalk.UseAbility(false);
-                        Utils.Sleep(500, "ghostwalk");
                     }
                     if (Utils.SleepCheck("movingnow"))
                     {
@@ -258,7 +277,7 @@ namespace InvokerNinja
                     }
                 }
             }
-            if (Game.IsKeyDown(Menu.Item("Target Select").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+            if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 0 && Game.IsKeyDown(Menu.Item("Target Select").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
                 target = me.ClosestToMouseTarget(1000);
             if (Game.IsKeyDown(Menu.Item("Combo Mode").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
             {
@@ -285,14 +304,23 @@ namespace InvokerNinja
                     vyse = me.FindItem("item_sheepstick");
                     bloodthorn = me.FindItem("item_bloodthorn");
                     urn = me.FindItem("item_urn_of_shadows");
+                    refresher = me.FindItem("item_refresher");
+                    ethereal = me.FindItem("item_ethereal_blade");
+                    dagon = me.Inventory.Items.FirstOrDefault(x => x.Name.Contains("item_dagon"));
                     Utils.Sleep(500, "ORBSFIND");
                 }
-                if (target != null && (!target.IsAlive || target.IsIllusion || distance_me_target > 3000 || !target.IsVisible))
-                    target = null;
-                if (target == null)
-                    target = me.BestAATarget(1000);
+                if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 0)
+                {
+                    if (target != null && (!target.IsAlive || target.IsIllusion || distance_me_target > 3000 || !target.IsVisible))
+                        target = null;
+                    if (target == null)
+                        target = me.BestAATarget(1000);
+                }
+                else if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 1)
+                    target = me.ClosestToMouseTarget(1000);
                 if (target != null && target.IsValid && !target.IsIllusion)
                 {
+                    //Console.WriteLine(target.Modifiers.LastOrDefault().Name);
                     if (Utils.SleepCheck("Variable Checker"))
                     {
                         distance_me_target = target.NetworkPosition.Distance2D(me.NetworkPosition);
@@ -384,7 +412,10 @@ namespace InvokerNinja
                                 Utils.Sleep(5000, "combotime");
                             }
                             if (Utils.SleepCheck("combotime"))
+                            {
                                 comboing = false;
+                                refresher_use = false;
+                            }
                             if (combonumber == 1)
                             {
                                 if (Utils.SleepCheck("orbwalker"))
@@ -400,30 +431,30 @@ namespace InvokerNinja
                                     eul.UseAbility(target, false);
                                     Utils.Sleep(500, "eul");
                                 }
-                                if (meteor.Cooldown == 0 && Utils.SleepCheck("eul"))
+                                if (meteor.Cooldown == 0)
                                 {
                                     InvokeSkill(meteor);
-                                    if (meteor.CanBeCasted() && Utils.SleepCheck("cd_meteor") && target_meteor_ontiming)
+                                    if (meteor.CanBeCasted() && Utils.SleepCheck("cd_meteor") && target_meteor_ontiming && Utils.SleepCheck("eul"))
                                     {
                                         meteor.UseAbility(target.Position, false);
                                         Utils.Sleep(250, "cd_meteor");
                                         Utils.Sleep(250, "cd_meteor_a");
                                     }
                                 }
-                                if (sunstrike.Cooldown == 0 && Utils.SleepCheck("eul"))
+                                if (sunstrike.Cooldown == 0)
                                 {
                                     InvokeSkill(sunstrike);
-                                    if (sunstrike.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && target_sunstrike_ontiming)
+                                    if (sunstrike.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && target_sunstrike_ontiming && Utils.SleepCheck("eul"))
                                     {
                                         sunstrike.UseAbility(target.Position, false);
                                         Utils.Sleep(250, "cd_sunstrike");
                                         Utils.Sleep(700, "cd_sunstrike_a");
                                     }
                                 }
-                                if (blast.Cooldown == 0 && sunstrike.Cooldown > 0 && meteor.Cooldown > 0 && Utils.SleepCheck("eul"))
+                                if (blast.Cooldown == 0 && sunstrike.Cooldown > 0 && meteor.Cooldown > 0)
                                 {
                                     InvokeSkill(blast);
-                                    if (blast.CanBeCasted() && distance_me_target <= 900 && Utils.SleepCheck("cd_blast") && target_blast_ontiming)
+                                    if (blast.CanBeCasted() && distance_me_target <= 900 && Utils.SleepCheck("cd_blast") && target_blast_ontiming && Utils.SleepCheck("eul"))
                                     {
                                         blast.UseAbility(target.Position, false);
                                         comboing = false;
@@ -434,194 +465,455 @@ namespace InvokerNinja
                             }
                             if (combonumber == 2)
                             {
-                                bool invokecd = ((invoke.Level == 4 && me.FindItem("item_octarine_core") != null) || (invoke.Level >= 3 && me.AghanimState()) || (invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState());
-                                if (Utils.SleepCheck("orbwalker"))
+                                bool invokecd = ((invoke.Level == 4 && me.AghanimState()) || ((invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState()));
+                                if (refresher_use == false)
                                 {
-                                    if (me.Distance2D(target) >= OrbMinDist)
-                                        Orbwalking.Orbwalk(target);
+                                    if (Utils.SleepCheck("orbwalker"))
+                                    {
+                                        if (me.Distance2D(target) >= OrbMinDist)
+                                            Orbwalking.Orbwalk(target);
+                                        else
+                                            me.Attack(target, false);
+                                        Utils.Sleep(200, "orbwalker");
+                                    }
+                                    if (tornado.Cooldown == 0)
+                                    {
+                                        InvokeSkill(tornado);
+                                        if (tornado.CanBeCasted() && Utils.SleepCheck("cd_tornado"))
+                                        {
+                                            tornado.UseAbility(Prediction.PredictedXYZ(target, (distance_me_target / 1100 * 1000) + target.MovementSpeed), false);
+                                            Utils.Sleep(250, "cd_tornado");
+                                            Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "cd_tornado_a");
+                                            Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "combotime");
+                                        }
+                                    }
+                                    if (emp.Cooldown == 0)
+                                    {
+                                        InvokeSkill(emp);
+                                        if (emp.CanBeCasted() && target_emp_ontiming && Utils.SleepCheck("cd_emp") && Utils.SleepCheck("cd_tornado_a"))
+                                        {
+                                            emp.UseAbility(target.Position, false);
+                                            Utils.Sleep(250, "cd_emp");
+                                            Utils.Sleep(1000, "cd_emp_a");
+                                        }
+                                    }
+                                    if (invokecd && exort_level)
+                                    {
+                                        if(ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
+                                        {
+                                            ethereal.UseAbility(target, false);
+                                            Utils.Sleep(250, "Ethereal");
+                                        }
+                                        if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
+                                        {
+                                            dagon.UseAbility(target, false);
+                                            Utils.Sleep(250, "Dagon");
+                                        }
+                                        if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
+                                        {
+                                            medallion.UseAbility(target, false);
+                                            Utils.Sleep(500, "medallion");
+                                        }
+                                        if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
+                                        {
+                                            solar_crest.UseAbility(target, false);
+                                            Utils.Sleep(500, "crest");
+                                        }
+                                        if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            malevolence.UseAbility(target, false);
+                                            Utils.Sleep(500, "male");
+                                            Utils.Sleep(5000, "malepop");
+                                        }
+                                        if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            vyse.UseAbility(target, false);
+                                            Utils.Sleep(500, "vyse");
+                                            Utils.Sleep(3500, "vysepop");
+                                        }
+                                        if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            bloodthorn.UseAbility(target, false);
+                                            Utils.Sleep(500, "blood");
+                                            Utils.Sleep(5000, "bloodpop");
+                                        }
+                                        if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            urn.UseAbility(target, false);
+                                            Utils.Sleep(800, "urn");
+                                        }
+                                        if (meteor.Cooldown == 0 && emp.Cooldown > 0 && tornado.Cooldown > 0)
+                                        {
+                                            InvokeSkill(meteor);
+                                            if (meteor.CanBeCasted() && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp") && Utils.SleepCheck("cd_meteor") && target_meteor_ontiming)
+                                            {
+                                                meteor.UseAbility(target.Position, false);
+                                                Utils.Sleep(250, "cd_meteor");
+                                                Utils.Sleep(250, "cd_meteor_a");
+                                            }
+                                        }
+                                        if (blast.Cooldown > 0 && coldsnap.Cooldown == 0 && emp.Cooldown > 0 && tornado.Cooldown > 0)
+                                        {
+                                            InvokeSkill(coldsnap);
+                                            if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                            {
+                                                coldsnap.UseAbility(target, false);
+                                                comboing = false;
+                                                Utils.Sleep(250, "cd_coldsnap");
+                                            }
+                                        }
+                                        if (blast.Cooldown == 0 && emp.Cooldown > 0 && tornado.Cooldown > 0)
+                                        {
+                                            if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0)
+                                            {
+                                                InvokeSkill(blast);
+                                                if (blast.CanBeCasted() && distance_me_target <= 900 && (target_isinvul ? target_blast_ontiming : true) && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_blast"))
+                                                {
+                                                    blast.UseAbility(target.Position, false);
+                                                    Utils.Sleep(250, "cd_blast");
+                                                    Utils.Sleep(800, "cd_blast_a");
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if(blast.Cooldown > 0 && meteor.Cooldown > 0 && Utils.SleepCheck("refreshertimer") && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
+                                    {
+                                        if ((refresher == null || !refresher.CanBeCasted() || me.Mana < refresher.ManaCost + meteor.ManaCost + blast.ManaCost))
+                                            comboing = false;
+                                        else
+                                        {
+                                            refresher_use = true;
+                                            Utils.Sleep(5000, "combotime");
+                                        }
+                                        Utils.Sleep(2500, "refreshertimer");
+                                    }
                                     else
-                                        me.Attack(target, false);
-                                    Utils.Sleep(200, "orbwalker");
-                                }
-                                if (tornado.Cooldown == 0)
-                                {
-                                    InvokeSkill(tornado);
-                                    if (tornado.CanBeCasted() && Utils.SleepCheck("cd_tornado"))
                                     {
-                                        tornado.UseAbility(Prediction.PredictedXYZ(target, (distance_me_target / 1100 * 1000) + target.MovementSpeed), false);
-                                        Utils.Sleep(250, "cd_tornado");
-                                        Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "cd_tornado_a");
-                                        Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "combotime");
+                                        if (coldsnap.Cooldown == 0 && emp.Cooldown > 0 && tornado.Cooldown > 0)
+                                        {
+                                            InvokeSkill(coldsnap);
+                                            if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                            {
+                                                coldsnap.UseAbility(target, false);
+                                                comboing = false;
+                                                Utils.Sleep(250, "cd_coldsnap");
+                                            }
+                                        }
+                                        if (coldsnap.Cooldown > 0 && emp.Cooldown > 0 && tornado.Cooldown > 0)
+                                        {
+                                            if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0)
+                                            {
+                                                InvokeSkill(blast);
+                                                if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming && Utils.SleepCheck("cd_blast") && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                                {
+                                                    blast.UseAbility(target.Position, false);
+                                                    comboing = false;
+                                                    Utils.Sleep(250, "cd_blast");
+                                                    Utils.Sleep(800, "cd_blast_a");
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                                if (emp.Cooldown == 0 && Utils.SleepCheck("cd_emp") && Utils.SleepCheck("cd_tornado_a"))
+                                else
                                 {
-                                    InvokeSkill(emp);
-                                    if (emp.CanBeCasted() && target_emp_ontiming)
+                                    if (refresher != null && refresher.CanBeCasted() && Utils.SleepCheck("Refresher usage") && meteor.Cooldown > 0 && blast.Cooldown > 0)
                                     {
-                                        emp.UseAbility(target.Position, false);
-                                        Utils.Sleep(250, "cd_emp");
-                                        Utils.Sleep(1000, "cd_emp_a");
+                                        Utils.Sleep(5000, "combotime");
+                                        refresher.UseAbility(false);
+                                        Utils.Sleep(250, "Refresher usage");
                                     }
-                                }
-                                if (invokecd && exort_level)
-                                {
-                                    if (meteor.Cooldown == 0 && emp.Cooldown > 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                    if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
+                                    {
+                                        ethereal.UseAbility(target, false);
+                                        Utils.Sleep(250, "Ethereal");
+                                    }
+                                    if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
+                                    {
+                                        dagon.UseAbility(target, false);
+                                        Utils.Sleep(250, "Dagon");
+                                    }
+                                    if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
+                                    {
+                                        medallion.UseAbility(target, false);
+                                        Utils.Sleep(500, "medallion");
+                                    }
+                                    if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
+                                    {
+                                        solar_crest.UseAbility(target, false);
+                                        Utils.Sleep(500, "crest");
+                                    }
+                                    if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        malevolence.UseAbility(target, false);
+                                        Utils.Sleep(500, "male");
+                                        Utils.Sleep(5000, "malepop");
+                                    }
+                                    if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        vyse.UseAbility(target, false);
+                                        Utils.Sleep(500, "vyse");
+                                        Utils.Sleep(3500, "vysepop");
+                                    }
+                                    if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        bloodthorn.UseAbility(target, false);
+                                        Utils.Sleep(500, "blood");
+                                        Utils.Sleep(5000, "bloodpop");
+                                    }
+                                    if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        urn.UseAbility(target, false);
+                                        Utils.Sleep(800, "urn");
+                                    }
+                                    if (meteor.Cooldown == 0)
                                     {
                                         InvokeSkill(meteor);
-                                        if (meteor.CanBeCasted() && Utils.SleepCheck("cd_meteor") && target_meteor_ontiming)
+                                        if (meteor.CanBeCasted() && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_meteor"))
                                         {
                                             meteor.UseAbility(target.Position, false);
                                             Utils.Sleep(250, "cd_meteor");
                                             Utils.Sleep(250, "cd_meteor_a");
                                         }
                                     }
-                                    if (blast.Cooldown > 0 && coldsnap.Cooldown == 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                    if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && meteor.Cooldown > 0 && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
                                     {
-                                        InvokeSkill(coldsnap);
-                                        if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune)
+                                        InvokeSkill(blast);
+                                        if (blast.CanBeCasted() && distance_me_target <= 900 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_blast"))
                                         {
-                                            coldsnap.UseAbility(target, false);
+                                            blast.UseAbility(target.Position, false);
                                             comboing = false;
-                                            Utils.Sleep(250, "cd_coldsnap");
-                                        }
-                                    }
-                                    if (blast.Cooldown == 0 && emp.Cooldown > 0 && tornado.Cooldown > 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp")) //FIX blast BUG!!!
-                                    {
-                                        if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && Utils.SleepCheck("cd_blast"))
-                                        {
-                                            InvokeSkill(blast);
-                                            if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming)
-                                            {
-                                                blast.UseAbility(target.Position, false);
-                                                comboing = false;
-                                                Utils.Sleep(250, "cd_blast");
-                                                Utils.Sleep(800, "cd_blast_a");
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    if (coldsnap.Cooldown == 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
-                                    {
-                                        InvokeSkill(coldsnap);
-                                        if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune)
-                                        {
-                                            coldsnap.UseAbility(target, false);
-                                            comboing = false;
-                                            Utils.Sleep(250, "cd_coldsnap");
-                                        }
-                                    }
-                                    if (coldsnap.Cooldown > 0 && emp.Cooldown > 0 && tornado.Cooldown > 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp")) //FIX blast BUG!!!
-                                    {
-                                        if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && Utils.SleepCheck("cd_blast"))
-                                        {
-                                            InvokeSkill(blast);
-                                            if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming)
-                                            {
-                                                blast.UseAbility(target.Position, false);
-                                                comboing = false;
-                                                Utils.Sleep(250, "cd_blast");
-                                                Utils.Sleep(800, "cd_blast_a");
-                                            }
+                                            refresher_use = false;
+                                            Utils.Sleep(250, "cd_blast");
+                                            Utils.Sleep(800, "cd_blast_a");
                                         }
                                     }
                                 }
                             }
                             if (combonumber == 3)
                             {
-                                bool invokecd = ((invoke.Level == 4 && me.FindItem("item_octarine_core") != null) || (invoke.Level >= 3 && me.AghanimState()) || (invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState());
-                                if (Utils.SleepCheck("orbwalker"))
+                                bool invokecd = ((invoke.Level == 4 && me.AghanimState()) || ((invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState()));
+                                if (refresher_use == false)
                                 {
-                                    if (me.Distance2D(target) >= OrbMinDist)
-                                        Orbwalking.Orbwalk(target);
-                                    else
-                                        me.Attack(target, false);
-                                    Utils.Sleep(200, "orbwalker");
-                                }
-                                if (tornado.Cooldown == 0)
-                                {
-                                    InvokeSkill(tornado);
-                                    if (tornado.CanBeCasted() && Utils.SleepCheck("cd_tornado"))
+                                    if (Utils.SleepCheck("orbwalker"))
                                     {
-                                        tornado.UseAbility(Prediction.PredictedXYZ(target, (distance_me_target / 1100 * 1000) + target.MovementSpeed), false);
-                                        Utils.Sleep(250, "cd_tornado");
-                                        Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "cd_tornado_a");
-                                        Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "combotime");
+                                        if (me.Distance2D(target) >= OrbMinDist)
+                                            Orbwalking.Orbwalk(target);
+                                        else
+                                            me.Attack(target, false);
+                                        Utils.Sleep(200, "orbwalker");
                                     }
-                                }
-                                if (meteor.Cooldown == 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_emp"))
-                                {
-                                    InvokeSkill(meteor);
-                                    if (meteor.CanBeCasted() && Utils.SleepCheck("cd_meteor") && target_meteor_ontiming)
+                                    if (tornado.Cooldown == 0)
                                     {
-                                        meteor.UseAbility(target.Position, false);
-                                        Utils.Sleep(250, "cd_meteor");
-                                        Utils.Sleep(250, "cd_meteor_a");
-                                    }
-                                }
-                                if (invokecd && exort_level)
-                                {
-                                    if (sunstrike.Cooldown == 0 && Utils.SleepCheck("cd_tornado_a"))
-                                    {
-                                        InvokeSkill(sunstrike);
-                                        if (sunstrike.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && target_sunstrike_ontiming)
+                                        InvokeSkill(tornado);
+                                        if (tornado.CanBeCasted() && Utils.SleepCheck("cd_tornado"))
                                         {
-                                            sunstrike.UseAbility(target.Position, false);
-                                            Utils.Sleep(250, "cd_sunstrike");
-                                            Utils.Sleep(700, "cd_sunstrike_a");
+                                            tornado.UseAbility(Prediction.PredictedXYZ(target, (distance_me_target / 1100 * 1000) + target.MovementSpeed), false);
+                                            Utils.Sleep(250, "cd_tornado");
+                                            Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "cd_tornado_a");
+                                            Utils.Sleep(((distance_me_target / 1000) * 1000) + 300, "combotime");
                                         }
                                     }
-                                    if (blast.Cooldown > 0 && coldsnap.Cooldown == 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap"))
+                                    if (meteor.Cooldown == 0)
                                     {
-                                        InvokeSkill(coldsnap);
-                                        if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune)
+                                        InvokeSkill(meteor);
+                                        if (meteor.CanBeCasted() && Utils.SleepCheck("cd_meteor") && target_meteor_ontiming && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_emp"))
                                         {
-                                            coldsnap.UseAbility(target, false);
-                                            comboing = false;
-                                            Utils.Sleep(250, "cd_coldsnap");
+                                            meteor.UseAbility(target.Position, false);
+                                            Utils.Sleep(250, "cd_meteor");
+                                            Utils.Sleep(250, "cd_meteor_a");
                                         }
                                     }
-                                    if (blast.Cooldown == 0 && tornado.Cooldown > 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp")) //FIX blast BUG!!!
+                                    if (invokecd && exort_level)
                                     {
-                                        if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && Utils.SleepCheck("cd_blast"))
+                                        if (sunstrike.Cooldown == 0 && tornado.Cooldown > 0)
                                         {
-                                            InvokeSkill(blast);
-                                            if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming)
+                                            InvokeSkill(sunstrike);
+                                            if (sunstrike.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && target_sunstrike_ontiming && Utils.SleepCheck("cd_tornado_a"))
                                             {
-                                                blast.UseAbility(target.Position, false);
+                                                sunstrike.UseAbility(target.Position, false);
+                                                Utils.Sleep(250, "cd_sunstrike");
+                                                Utils.Sleep(5000, "combotime");
+                                                Utils.Sleep(700, "cd_sunstrike_a");
+                                            }
+                                        }
+                                        if (blast.Cooldown > 0 && coldsnap.Cooldown == 0 && tornado.Cooldown > 0 && sunstrike.Cooldown > 0 && meteor.Cooldown > 0 && Utils.SleepCheck("cd_blast_a"))
+                                        {
+                                            InvokeSkill(coldsnap);
+                                            if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap"))
+                                            {
+                                                coldsnap.UseAbility(target, false);
                                                 comboing = false;
-                                                Utils.Sleep(250, "cd_blast");
-                                                Utils.Sleep(800, "cd_blast_a");
+                                                Utils.Sleep(250, "cd_coldsnap");
+                                            }
+                                        }
+                                        if (blast.Cooldown == 0 && tornado.Cooldown > 0 && tornado.Cooldown > 0 && sunstrike.Cooldown > 0 && meteor.Cooldown > 0)
+                                        {
+                                            if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && Utils.SleepCheck("cd_blast") && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                            {
+                                                InvokeSkill(blast);
+                                                if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming)
+                                                {
+                                                    blast.UseAbility(target.Position, false);
+                                                    Utils.Sleep(250, "cd_blast");
+                                                    Utils.Sleep(800, "cd_blast_a");
+                                                }
+                                            }
+                                        }
+                                        if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
+                                        {
+                                            ethereal.UseAbility(target, false);
+                                            Utils.Sleep(250, "Ethereal");
+                                        }
+                                        if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
+                                        {
+                                            dagon.UseAbility(target, false);
+                                            Utils.Sleep(250, "Dagon");
+                                        }
+                                        if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
+                                        {
+                                            medallion.UseAbility(target, false);
+                                            Utils.Sleep(500, "medallion");
+                                        }
+                                        if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
+                                        {
+                                            solar_crest.UseAbility(target, false);
+                                            Utils.Sleep(500, "crest");
+                                        }
+                                        if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            malevolence.UseAbility(target, false);
+                                            Utils.Sleep(500, "male");
+                                            Utils.Sleep(5000, "malepop");
+                                        }
+                                        if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            vyse.UseAbility(target, false);
+                                            Utils.Sleep(500, "vyse");
+                                            Utils.Sleep(3500, "vysepop");
+                                        }
+                                        if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            bloodthorn.UseAbility(target, false);
+                                            Utils.Sleep(500, "blood");
+                                            Utils.Sleep(5000, "bloodpop");
+                                        }
+                                        if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
+                                        {
+                                            urn.UseAbility(target, false);
+                                            Utils.Sleep(800, "urn");
+                                        }
+                                        if (blast.Cooldown > 0 && sunstrike.Cooldown > 0 && Utils.SleepCheck("refreshertimer") && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
+                                        {
+                                            if ((refresher == null || !refresher.CanBeCasted() || me.Mana < refresher.ManaCost + sunstrike.ManaCost + blast.ManaCost))
+                                                comboing = false;
+                                            else
+                                            {
+                                                refresher_use = true;
+                                                Utils.Sleep(5000, "combotime");
+                                            }
+                                            Utils.Sleep(2500, "refreshertimer");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (blast.Cooldown > 0 && coldsnap.Cooldown == 0 && tornado.Cooldown > 0 && meteor.Cooldown > 0)
+                                        {
+                                            InvokeSkill(coldsnap);
+                                            if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap"))
+                                            {
+                                                coldsnap.UseAbility(target, false);
+                                                comboing = false;
+                                                Utils.Sleep(250, "cd_coldsnap");
+                                            }
+                                        }
+                                        if (blast.Cooldown == 0 && tornado.Cooldown > 0 && meteor.Cooldown > 0)
+                                        {
+                                            if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && Utils.SleepCheck("cd_blast") && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp"))
+                                            {
+                                                InvokeSkill(blast);
+                                                if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming)
+                                                {
+                                                    blast.UseAbility(target.Position, false);
+                                                    comboing = false;
+                                                    Utils.Sleep(250, "cd_blast");
+                                                    Utils.Sleep(800, "cd_blast_a");
+                                                }
                                             }
                                         }
                                     }
                                 }
                                 else
                                 {
-                                    if (blast.Cooldown > 0 && coldsnap.Cooldown == 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap"))
+                                    if (refresher != null && refresher.CanBeCasted() && Utils.SleepCheck("Refresher usage") && sunstrike.Cooldown > 0 && blast.Cooldown > 0)
                                     {
-                                        InvokeSkill(coldsnap);
-                                        if (coldsnap.CanBeCasted() && distance_me_target <= 750 && !target_isinvul && !target_magic_imune)
+                                        Utils.Sleep(5000, "combotime");
+                                        refresher.UseAbility(false);
+                                        Utils.Sleep(250, "Refresher usage");
+                                    }
+                                    if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
+                                    {
+                                        ethereal.UseAbility(target, false);
+                                        Utils.Sleep(250, "Ethereal");
+                                    }
+                                    if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
+                                    {
+                                        dagon.UseAbility(target, false);
+                                        Utils.Sleep(250, "Dagon");
+                                    }
+                                    if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
+                                    {
+                                        medallion.UseAbility(target, false);
+                                        Utils.Sleep(500, "medallion");
+                                    }
+                                    if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
+                                    {
+                                        solar_crest.UseAbility(target, false);
+                                        Utils.Sleep(500, "crest");
+                                    }
+                                    if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        malevolence.UseAbility(target, false);
+                                        Utils.Sleep(500, "male");
+                                        Utils.Sleep(5000, "malepop");
+                                    }
+                                    if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        vyse.UseAbility(target, false);
+                                        Utils.Sleep(500, "vyse");
+                                        Utils.Sleep(3500, "vysepop");
+                                    }
+                                    if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        bloodthorn.UseAbility(target, false);
+                                        Utils.Sleep(500, "blood");
+                                        Utils.Sleep(5000, "bloodpop");
+                                    }
+                                    if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
+                                    {
+                                        urn.UseAbility(target, false);
+                                        Utils.Sleep(800, "urn");
+                                    }
+                                    if (sunstrike.Cooldown == 0)
+                                    {
+                                        InvokeSkill(sunstrike);
+                                        if (sunstrike.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && Utils.SleepCheck("cd_tornado_a"))
                                         {
-                                            coldsnap.UseAbility(target, false);
-                                            comboing = false;
-                                            Utils.Sleep(250, "cd_coldsnap");
+                                            sunstrike.UseAbility(new Vector3(me.NetworkPosition.X + (distance_me_target + 200) * (float)Math.Cos(me.NetworkPosition.ToVector2().FindAngleBetween(target.NetworkPosition.ToVector2(), true)), me.NetworkPosition.Y + (distance_me_target + 200) * (float)Math.Sin(me.NetworkPosition.ToVector2().FindAngleBetween(target.NetworkPosition.ToVector2(), true)), 100), false);
+                                            Utils.Sleep(250, "cd_sunstrike");
+                                            Utils.Sleep(700, "cd_sunstrike_a");
                                         }
                                     }
-                                    if (blast.Cooldown == 0 && tornado.Cooldown > 0 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_coldsnap") && Utils.SleepCheck("cd_emp")) //FIX blast BUG!!!
+                                    if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && sunstrike.Cooldown > 0 && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
                                     {
-                                        if (blast.Cooldown == 0 && quas.Level > 0 && wex.Level > 0 && exort.Level > 0 && Utils.SleepCheck("cd_blast"))
+                                        InvokeSkill(blast);
+                                        if (blast.CanBeCasted() && distance_me_target <= 900 && Utils.SleepCheck("cd_tornado_a") && Utils.SleepCheck("cd_blast"))
                                         {
-                                            InvokeSkill(blast);
-                                            if (blast.CanBeCasted() && distance_me_target <= 900 && target_blast_ontiming)
-                                            {
-                                                blast.UseAbility(target.Position, false);
-                                                comboing = false;
-                                                Utils.Sleep(250, "cd_blast");
-                                                Utils.Sleep(800, "cd_blast_a");
-                                            }
+                                            blast.UseAbility(target.Position, false);
+                                            comboing = false;
+                                            refresher_use = false;
+                                            Utils.Sleep(250, "cd_blast");
+                                            Utils.Sleep(800, "cd_blast_a");
                                         }
                                     }
                                 }
@@ -693,11 +985,6 @@ namespace InvokerNinja
                                         Utils.Sleep(800, "cd_blast_a");
                                     }
                                 }
-                                //if (nextskillvalue == 7)
-                                //{
-                                //    InvokeSkill(sunstrike);
-                                //    sunstrike.UseAbility(target.Position, false);
-                                //}
                                 if (nextskillvalue == 8 && Utils.SleepCheck("cd_emp"))
                                 {
                                     InvokeSkill(emp);
@@ -729,19 +1016,9 @@ namespace InvokerNinja
                                 }
                                 if (nextskillvalue == 0 && Utils.SleepCheck("moving_idle"))
                                 {
-                                    //if (me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
-                                    //{
-                                    //    orb_type(wex);
-                                    //    Utils.Sleep(900, "orbchange");
-                                    //}
                                     me.Move(Game.MousePosition, false);
                                     Utils.Sleep(300, "moving_idle");
                                 }
-                                //// modifier_invoker_deafining_blast_knockback
-                                //// modifier_invoker_tornado
-                                //// modifier_eul_cyclone
-                                //// modifier_obsidian_destroyer_astral_imprisonment_prison
-                                //// modifier_shadow_demon_disruption
                             }
                         }
                     }
@@ -837,7 +1114,7 @@ namespace InvokerNinja
         }
         private static uint IsComboPrepared()
         {
-            if (Iscasted(meteor) && Iscasted(sunstrike) && sunstrike.Cooldown == 0 && meteor.Cooldown == 0 && (me.FindItem("item_cyclone") != null || (target_meteor_ontiming && target_sunstrike_ontiming)))
+            if (Iscasted(meteor) && (Iscasted(sunstrike) || Utils.SleepCheck("cd_sunstrike_a")) && (sunstrike.Cooldown == 0 || Utils.SleepCheck("cd_sunstrike_a")) && meteor.Cooldown == 0 && (me.FindItem("item_cyclone") != null || (target_meteor_ontiming && target_sunstrike_ontiming)))
                 return 1;
             if (Iscasted(emp) && Iscasted(tornado) && emp.Cooldown == 0 && tornado.Cooldown == 0)
                 return 2;
@@ -891,23 +1168,26 @@ namespace InvokerNinja
             var modifierShadowDemonDisruption = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_shadow_demon_disruption");
             var modifierPudgeDismember = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_pudge_dismember");
             var modifierlegionduel = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_legion_commander_duel");
+            var modifierbaneult = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_bane_fiends_grip");
+            var modifieraxeberserkerscall = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_axe_berserkers_call");
+            var modifiershackles = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_shadow_shaman_shackles");
             var modifiercrono = Enemy.Modifiers.FirstOrDefault(x => x.Name == "modifier_faceless_void_chronosphere_freeze");
             if (Enemy.HasModifier("modifier_invoker_deafining_blast_knockback")
                 && modifierInvokerDeafiningBlastKnockback != null
                 && modifierInvokerDeafiningBlastKnockback.RemainingTime <= timing
-                && modifierInvokerDeafiningBlastKnockback.RemainingTime > timing_a)
+                && modifierInvokerDeafiningBlastKnockback.RemainingTime >= timing_a)
             {
                 return true;
             }
             if (Enemy.HasModifier("modifier_invoker_tornado") && modifierInvokerTornado != null
                 && modifierInvokerTornado.RemainingTime <= timing
-                && modifierInvokerTornado.RemainingTime > timing_a)
+                && modifierInvokerTornado.RemainingTime >= timing_a)
             {
                 return true;
             }
             if (Enemy.HasModifier("modifier_eul_cyclone") && modifierEulCyclone != null
                 && modifierEulCyclone.RemainingTime <= timing
-                && modifierEulCyclone.RemainingTime > timing_a)
+                && modifierEulCyclone.RemainingTime >= timing_a)
             {
                 return true;
             }
@@ -920,14 +1200,35 @@ namespace InvokerNinja
             }
             if (Enemy.HasModifier("modifier_pudge_dismember")
                 && modifierPudgeDismember != null
-                && modifierPudgeDismember.RemainingTime > timing_a
+                && modifierPudgeDismember.RemainingTime >= timing_a
                 && !Enemy.IsInvul())
             {
                 return true;
             }
             if (Enemy.HasModifier("modifier_legion_commander_duel")
                 && modifierlegionduel != null
-                && modifierlegionduel.RemainingTime > timing_a
+                && modifierlegionduel.RemainingTime >= timing_a
+                && !Enemy.IsInvul())
+            {
+                return true;
+            }
+            if (Enemy.HasModifier("modifier_bane_fiends_grip")
+                && modifierbaneult != null
+                && modifierbaneult.RemainingTime >= timing_a
+                && !Enemy.IsInvul())
+            {
+                return true;
+            }
+            if (Enemy.HasModifier("modifier_shadow_shaman_shackles")
+                && modifiershackles != null
+                && modifiershackles.RemainingTime >= timing_a
+                && !Enemy.IsInvul())
+            {
+                return true;
+            }
+            if (Enemy.HasModifier("modifier_axe_berserkers_call")
+                && modifieraxeberserkerscall != null
+                && modifieraxeberserkerscall.RemainingTime >= timing_a
                 && !Enemy.IsInvul())
             {
                 return true;
@@ -940,20 +1241,20 @@ namespace InvokerNinja
             }
             if (Enemy.HasModifier("modifier_invoker_cold_snap")
                 && modifierInvokerColdSnap != null
-                && modifierInvokerColdSnap.RemainingTime > timing_a
+                && modifierInvokerColdSnap.RemainingTime >= timing_a
                 && !Enemy.IsInvul())
             {
                 return true;
             }
             if (Enemy.HasModifier("modifier_stunned") && modifierStunned != null
-                && modifierStunned.RemainingTime > timing_a
+                && modifierStunned.RemainingTime >= timing_a
                 && !Enemy.IsInvul())
             {
                 return true;
             }
             if (Enemy.HasModifier("modifier_windrunner_shackle_shot")
                 && modifierWindrunnerShackleShot != null
-                && modifierWindrunnerShackleShot.RemainingTime > timing_a
+                && modifierWindrunnerShackleShot.RemainingTime >= timing_a
                 && !Enemy.IsInvul())
             {
                 return true;
@@ -961,7 +1262,7 @@ namespace InvokerNinja
             return Enemy.HasModifier("modifier_shadow_demon_disruption")
                    && modifierShadowDemonDisruption != null
                    && modifierShadowDemonDisruption.RemainingTime <= timing
-                   && modifierShadowDemonDisruption.RemainingTime > timing_a;
+                   && modifierShadowDemonDisruption.RemainingTime >= timing_a;
         }
         private static bool InvokerCanCast(Ability skill)
         {
@@ -1309,7 +1610,7 @@ namespace InvokerNinja
                 }
                 if (((TurntimeOntick.FirstOrDefault(x => x.Key >= currenttickcount - (SunstrikeTimeConfig + 50) && x.Key <= currenttickcount - (SunstrikeTimeConfig - 50)).Value - (int)Enemy.NetworkRotation) != 0))
                 {
-                    Utils.Sleep(100, "TargetIsTurning");
+                    Utils.Sleep(200, "TargetIsTurning");
                 }
                 if (Utils.SleepCheck("TargetIsTurning") && Utils.SleepCheck("TargetIsTurning2"))
                 {
