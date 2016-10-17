@@ -267,7 +267,7 @@ namespace InvokerNinja
                                 Utils.Sleep(250, "ORBGHOST");
                             }
                         }
-                        if (Utils.SleepCheck("ORBGHOST") && (me.Modifiers.Count(x => x.Name.Contains("wex")) >= 4 || me.Modifiers.Count(x => x.Name.Contains("quas")) >= 4))
+                        if (Utils.SleepCheck("ORBGHOST") && (me.Modifiers.Count(x => x.Name.Contains("wex")) >= 4 || me.Modifiers.Count(x => x.Name.Contains("quas")) >= 4) && Iscasted(ghostwalk))
                             ghostwalk.UseAbility(false);
                     }
                     if (Utils.SleepCheck("movingnow"))
