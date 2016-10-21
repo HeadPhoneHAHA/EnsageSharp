@@ -1,1 +1,2 @@
 C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\bruninjaman - scripts 1.0\InvokerNinja\InvokerNinja\bin\Release\InvokerNinja.exe.config
+C:\Users\Bruno\Desktop\Things\Visual Basic Scripts\EnsageSharp-repositories\HeadPhone\EnsageSharp\EnsageSharp\InvokerNinja\InvokerNinja\bin\Release\InvokerNinja.exe.config

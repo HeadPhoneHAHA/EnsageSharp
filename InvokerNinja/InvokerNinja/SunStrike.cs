@@ -35,18 +35,13 @@ namespace InvokerNinja
         private static float distance_me_target, targetisturning_delay = -777;
         private static ParticleEffect targetParticle;
         private static List<Unit> myunits;
-        // Update Version 1.0.0.9
-        // > Fixed Sunstrike/meteor/emp timing
-        // > Added mana calculation for all skills except combos
-        // > Coldsnap range fixed
-        // > Tornado distance fixed
-        // ADDED A UI MENU BAR
-        // > Quick Cast Spells
-        // > Show:
-        // - Skills on cd
-        // - Skills without mana
-        // - Key to cast each skill
-        // You can set on/off on menu.
+        // Update Version 1.0.0.10
+        // > Small repair on coldsnap,forgespirit usage when it was already casted
+        // > Fixed sunstrike auto usage.
+        // > Fixed Eul's combo bug(trying to do combo without combo prepared)
+        // > Fixed meteor prediction on meteor
+        // > Fixed bug on menu when disable Quick spells
+        // > more time to combo added
         static void Main(string[] args)
         {
             Menu.AddItem(new MenuItem("Combo Mode", "Combo Mode").SetValue(new KeyBind('T', KeyBindType.Press)));
@@ -59,12 +54,12 @@ namespace InvokerNinja
             Menu.AddSubMenu(UiSkillBar);
             UiSkillBar.AddItem(new MenuItem("Enable Skill UI Bar", "Enable Skill UI Bar").SetValue(true).SetTooltip("Enable/Disable UI information bar."));
             UiSkillBar.AddItem(new MenuItem("Box Size", "Box Size").SetValue(new Slider(25, 5, 300)).SetTooltip("Set The box size of Menu"));
-            UiSkillBar.AddItem(new MenuItem("Box Position Y", "Box Position Y").SetValue(new Slider(Drawing.Height/2, 0, Drawing.Height)).SetTooltip("Set the Y position of Menu"));
-            UiSkillBar.AddItem(new MenuItem("Box Position X", "Box Position X").SetValue(new Slider(Drawing.Width/2, 0, Drawing.Width)).SetTooltip("Set the X position of Menu"));
+            UiSkillBar.AddItem(new MenuItem("Box Position Y", "Box Position Y").SetValue(new Slider(Drawing.Height / 2, 0, Drawing.Height)).SetTooltip("Set the Y position of Menu"));
+            UiSkillBar.AddItem(new MenuItem("Box Position X", "Box Position X").SetValue(new Slider(Drawing.Width / 2, 0, Drawing.Width)).SetTooltip("Set the X position of Menu"));
             var QuickcastSpells = new Menu("Quick Cast Spells", "Quick Cast Spells");
             Menu.AddSubMenu(QuickcastSpells);
             QuickcastSpells.AddItem(new MenuItem("Enable Quick Spells", "Enable Quick Spells").SetValue(true).SetTooltip("Enable/Disable instant cast spell using key. Reload script after set this option."));
-            QuickcastSpells.AddItem(new MenuItem("ColdSnap","Cold Snap").SetValue(new KeyBind('1', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
+            QuickcastSpells.AddItem(new MenuItem("ColdSnap", "Cold Snap").SetValue(new KeyBind('1', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
             QuickcastSpells.AddItem(new MenuItem("Forge Spirit", "Forge Spirit").SetValue(new KeyBind('2', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
             QuickcastSpells.AddItem(new MenuItem("Alacrity", "Alacrity").SetValue(new KeyBind('3', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
             QuickcastSpells.AddItem(new MenuItem("Tornado", "Tornado").SetValue(new KeyBind('4', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
@@ -116,55 +111,58 @@ namespace InvokerNinja
                 ghostwalk = me.FindSpell("invoker_ghost_walk");
                 Utils.Sleep(500, "ORBSFIND");
             }
-            if (Game.IsKeyDown(Menu.Item("ColdSnap").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+            if (Menu.Item("Enable Quick Spells").GetValue<bool>())
             {
-                if (!Iscasted(coldsnap))
-                    InvokeSkill(coldsnap);
-            }
-            if (Game.IsKeyDown(Menu.Item("Forge Spirit").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(forgespirit))
-                    InvokeSkill(forgespirit);
-            }
-            if (Game.IsKeyDown(Menu.Item("Alacrity").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(alacrity))
-                    InvokeSkill(alacrity);
-            }
-            if (Game.IsKeyDown(Menu.Item("Tornado").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(tornado))
-                    InvokeSkill(tornado);
-            }
-            if (Game.IsKeyDown(Menu.Item("Emp").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(emp))
-                    InvokeSkill(emp);
-            }
-            if (Game.IsKeyDown(Menu.Item("Meteor").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(meteor))
-                    InvokeSkill(meteor);
-            }
-            if (Game.IsKeyDown(Menu.Item("sunstrike").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(sunstrike))
-                    InvokeSkill(sunstrike);
-            }
-            if (Game.IsKeyDown(Menu.Item("Icewall").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(icewall))
-                    InvokeSkill(icewall);
-            }
-            if (Game.IsKeyDown(Menu.Item("Ghostwalk").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(ghostwalk))
-                    InvokeSkill(ghostwalk);
-            }
-            if (Game.IsKeyDown(Menu.Item("Defeaning blast").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
-            {
-                if (!Iscasted(blast))
-                    InvokeSkill(blast);
+                if (Game.IsKeyDown(Menu.Item("ColdSnap").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(coldsnap))
+                        InvokeSkill(coldsnap);
+                }
+                if (Game.IsKeyDown(Menu.Item("Forge Spirit").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(forgespirit))
+                        InvokeSkill(forgespirit);
+                }
+                if (Game.IsKeyDown(Menu.Item("Alacrity").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(alacrity))
+                        InvokeSkill(alacrity);
+                }
+                if (Game.IsKeyDown(Menu.Item("Tornado").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(tornado))
+                        InvokeSkill(tornado);
+                }
+                if (Game.IsKeyDown(Menu.Item("Emp").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(emp))
+                        InvokeSkill(emp);
+                }
+                if (Game.IsKeyDown(Menu.Item("Meteor").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(meteor))
+                        InvokeSkill(meteor);
+                }
+                if (Game.IsKeyDown(Menu.Item("sunstrike").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(sunstrike))
+                        InvokeSkill(sunstrike);
+                }
+                if (Game.IsKeyDown(Menu.Item("Icewall").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(icewall))
+                        InvokeSkill(icewall);
+                }
+                if (Game.IsKeyDown(Menu.Item("Ghostwalk").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(ghostwalk))
+                        InvokeSkill(ghostwalk);
+                }
+                if (Game.IsKeyDown(Menu.Item("Defeaning blast").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+                {
+                    if (!Iscasted(blast))
+                        InvokeSkill(blast);
+                }
             }
             if (Utils.SleepCheck("ORBSFIND2"))
             {
@@ -308,12 +306,12 @@ namespace InvokerNinja
                     if (spells.Name == "invoker_invoke") continue;
                     Drawing.DrawRect(new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize), Drawing.GetTexture("materials/ensage_ui/spellicons/" + spells.Name + ".vmat"));
                     Drawing.DrawRect(new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize), Color.Black, true);
+                    if (spells.Cooldown > 0)
+                        Drawing.DrawRect(new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize * (spells.Cooldown / spells.CooldownLength)), new Color(0x8B, 0x00, 0x00, 0x9E), false);
+                    if (me.Mana < spells.ManaCost)
+                        Drawing.DrawRect(new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize), new Color(0x5F, 0x00, 0xCE, 0x9E), false);
                     if (Menu.Item("Enable Quick Spells").GetValue<bool>())
                     {
-                        if (spells.Cooldown > 0)
-                            Drawing.DrawRect(new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize * (spells.Cooldown / spells.CooldownLength)), new Color(0x8B, 0x00, 0x00, 0x9E), false);
-                        if (me.Mana < spells.ManaCost)
-                            Drawing.DrawRect(new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize), new Color(0x5F, 0x00, 0xCE, 0x9E), false);
                         if (spells.Name.Contains("cold_snap"))
                             Drawing.DrawText(Convert.ToChar(Menu.Item("ColdSnap").GetValue<KeyBind>().Key).ToString(), new Vector2(boxX + i, boxY), new Vector2(boxsize, boxsize), Color.White, FontFlags.None);
                         if (spells.Name.Contains("forge"))
@@ -630,7 +628,7 @@ namespace InvokerNinja
                                     }
                                     if (invokecd && exort_level)
                                     {
-                                        if(ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
+                                        if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
                                         {
                                             ethereal.UseAbility(target, false);
                                             Utils.Sleep(250, "Ethereal");
@@ -707,7 +705,7 @@ namespace InvokerNinja
                                             }
                                         }
                                     }
-                                    if(blast.Cooldown > 0 && meteor.Cooldown > 0 && Utils.SleepCheck("refreshertimer") && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
+                                    if (blast.Cooldown > 0 && meteor.Cooldown > 0 && Utils.SleepCheck("refreshertimer") && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
                                     {
                                         if ((refresher == null || !refresher.CanBeCasted() || me.Mana < refresher.ManaCost + meteor.ManaCost + blast.ManaCost))
                                             comboing = false;
@@ -1073,7 +1071,7 @@ namespace InvokerNinja
                                     InvokeSkill(meteor);
                                     if (meteor.CanBeCasted())
                                     {
-                                        meteor.UseAbility(Prediction.PredictedXYZ(target, 1300 / 4 + target.MovementSpeed), false);
+                                        meteor.UseAbility(Prediction.PredictedXYZ(target, 1300 / 5 + target.MovementSpeed), false);
                                         Utils.Sleep(250, "cd_meteor");
                                         Utils.Sleep(250, "cd_meteor_a");
                                     }
@@ -1245,7 +1243,7 @@ namespace InvokerNinja
         }
         private static uint IsComboPrepared()
         {
-            if (Iscasted(meteor) && (Iscasted(sunstrike) || Utils.SleepCheck("cd_sunstrike_a")) && (sunstrike.Cooldown == 0 || Utils.SleepCheck("cd_sunstrike_a")) && meteor.Cooldown == 0 && (me.FindItem("item_cyclone") != null || (target_meteor_ontiming && target_sunstrike_ontiming)))
+            if (Iscasted(meteor) && (Iscasted(sunstrike) || !Utils.SleepCheck("cd_sunstrike_a")) && (sunstrike.Cooldown == 0 || !Utils.SleepCheck("cd_sunstrike_a")) && meteor.Cooldown == 0 && (me.FindItem("item_cyclone") != null || (target_meteor_ontiming && target_sunstrike_ontiming)))
                 return 1;
             if (Iscasted(emp) && Iscasted(tornado) && emp.Cooldown == 0 && tornado.Cooldown == 0)
                 return 2;
@@ -1270,12 +1268,12 @@ namespace InvokerNinja
             if (skill.Name == sunstrike.Name)
             {
                 timing = 1.7 + (Game.Ping / 1000);
-                timing_a = 1;
+                timing_a = 0.7;
             }
             else if (skill.Name == meteor.Name)
             {
                 timing = 1.5 + (Game.Ping / 1000);
-                timing_a = 1;
+                timing_a = 0.8 ;
             }
             else if (skill.Name == emp.Name)
             {
@@ -1452,13 +1450,13 @@ namespace InvokerNinja
                     return 0;
                 if (Iscasted(coldsnap) && coldsnap.CanBeCasted() && (distance_me_target <= 900 || (me.MovementSpeed >= target.MovementSpeed + 30 && distance_me_target <= 900)) && !target_isinvul && !target_magic_imune)
                     return 1;
-                if (Iscasted(forgespirit) && forgespirit.CanBeCasted() && distance_me_target <= 600 && !target_isinvul && !forge_in_my_side)
+                if (Iscasted(forgespirit) && forgespirit.CanBeCasted() && distance_me_target <= 900 && !target_isinvul)
                     return 5;
                 if (Iscasted(alacrity) && alacrity.CanBeCasted() && distance_me_target <= 700 && !target_isinvul)
                     return 3;
                 if (Iscasted(icewall) && icewall.CanBeCasted() && distance_me_target <= 200 && !target_magic_imune)
                     return 9;
-                if (Iscasted(blast) && blast.CanBeCasted() && distance_me_target <= 600 && (!target_isinvul || target_blast_ontiming))
+                if (Iscasted(blast) && blast.CanBeCasted() && distance_me_target <= 900 && (!target_isinvul || target_blast_ontiming))
                     return 6;
                 if (Iscasted(tornado) && tornado.CanBeCasted() && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop") && Utils.SleepCheck("vysepop"))
                     return 4;
@@ -1536,13 +1534,13 @@ namespace InvokerNinja
                     return 5;
                 if ((exort_level || wex_level) && me.Mana >= alacrity.ManaCost + invoke.ManaCost && alacrity.Cooldown == 0 && distance_me_target <= 600 && !target_isinvul && exort.Level > 0 && wex.Level > 0)
                     return 3;
-                if (quas_level && me.Mana >= icewall.ManaCost + invoke.ManaCost &&  icewall.Cooldown == 0 && !target_magic_imune && ice_wall_distance && quas.Level > 0 && exort.Level > 0)
+                if (quas_level && me.Mana >= icewall.ManaCost + invoke.ManaCost && icewall.Cooldown == 0 && !target_magic_imune && ice_wall_distance && quas.Level > 0 && exort.Level > 0)
                     return 9;
                 if (wex_level && me.Mana >= tornado.ManaCost + invoke.ManaCost && tornado.Cooldown == 0 && !target_isinvul && !target_magic_imune && distance_me_target <= 2800 && distance_me_target >= 900 && Utils.SleepCheck("cd_meteor_a") && Utils.SleepCheck("cd_blast_a") && Utils.SleepCheck("cd_emp_a") && Utils.SleepCheck("bloodpop") && Utils.SleepCheck("malepop") && Utils.SleepCheck("vysepop") && quas.Level > 0 && wex.Level > 0)
                     return 4;
                 if (exort_level && me.Mana >= sunstrike.ManaCost + invoke.ManaCost && meteor.Cooldown == 0 && !target_magic_imune && (target.MovementSpeed <= 250 || target_meteor_ontiming) && distance_me_target <= 700 && wex.Level > 0 && exort.Level > 0)
                     return 2;
-                if (exort_level && me.Mana >= sunstrike.ManaCost + invoke.ManaCost && sunstrike.Cooldown == 0 && (target.MovementSpeed < 200 || target_sunstrike_ontiming) && me.AttackSpeedValue >= 150 && exort.Level > 0)
+                if (exort_level && me.Mana >= sunstrike.ManaCost + invoke.ManaCost && sunstrike.Cooldown == 0 && (target.MovementSpeed < 200 || target_sunstrike_ontiming) && me.AttackSpeedValue >= 150 && exort.Level > 0 && !target.HasModifier("modifier_invoker_cold_snap"))
                     return 10;
                 if ((exort_level || quas_level || wex_level) && me.Mana >= blast.ManaCost + invoke.ManaCost && blast.Cooldown == 0 && !target_magic_imune && distance_me_target <= 950 && !target_isinvul && exort.Level > 0 && quas.Level > 0 && wex.Level > 0)
                     return 6;
