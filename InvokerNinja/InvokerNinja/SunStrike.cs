@@ -26,6 +26,7 @@ namespace InvokerNinja
         private static int boxX => Menu.Item("Box Position X").GetValue<Slider>().Value;
         private static int boxY => Menu.Item("Box Position Y").GetValue<Slider>().Value;
         private static int starttickcount, currenttickcount;
+        private static string SaveSelectedTargetName;
         private static Dictionary<int, int> TurntimeOntick = new Dictionary<int, int> { };
         private static Hero me, target, EnemykillablebySS, DisabledEnemy;
         private static uint nextskillvalue, combonumber, nextskillflee = 0;
@@ -35,13 +36,10 @@ namespace InvokerNinja
         private static float distance_me_target, targetisturning_delay = -777;
         private static ParticleEffect targetParticle;
         private static List<Unit> myunits;
-        // Update Version 1.0.0.10
-        // > Small repair on coldsnap,forgespirit usage when it was already casted
-        // > Fixed sunstrike auto usage.
-        // > Fixed Eul's combo bug(trying to do combo without combo prepared)
-        // > Fixed meteor prediction on meteor
-        // > Fixed bug on menu when disable Quick spells
-        // > more time to combo added
+        // Update Version 1.0.0.11
+        // > Reworked code(functions and variables to make code more simple).
+        // > Autoattack now always change orbs(exort if your exort level is high or wex if your wex level is high).
+        // > Fixed target selector, it will always prefer the selected target. if target goes to fog, it will find him again if it appears.
         static void Main(string[] args)
         {
             Menu.AddItem(new MenuItem("Combo Mode", "Combo Mode").SetValue(new KeyBind('T', KeyBindType.Press)));
@@ -49,6 +47,8 @@ namespace InvokerNinja
             Menu.AddItem(new MenuItem("Target Type: ", "Target Type: ").SetValue(new StringList(new[] { "Target Selector", "Closest to mouse" }))).SetTooltip("On target selector you can get a better position while comboing. but closest to mouse is more easier");
             if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 0)
                 Menu.AddItem(new MenuItem("Target Select", "Target Select").SetValue(new KeyBind('G', KeyBindType.Press)));
+
+
             var SunstrikeMenu = new Menu("Sunstrike", "AutoSunstrike");
             var UiSkillBar = new Menu("Ui SkillBar", "Ui SkillBar");
             Menu.AddSubMenu(UiSkillBar);
@@ -56,8 +56,13 @@ namespace InvokerNinja
             UiSkillBar.AddItem(new MenuItem("Box Size", "Box Size").SetValue(new Slider(25, 5, 300)).SetTooltip("Set The box size of Menu"));
             UiSkillBar.AddItem(new MenuItem("Box Position Y", "Box Position Y").SetValue(new Slider(Drawing.Height / 2, 0, Drawing.Height)).SetTooltip("Set the Y position of Menu"));
             UiSkillBar.AddItem(new MenuItem("Box Position X", "Box Position X").SetValue(new Slider(Drawing.Width / 2, 0, Drawing.Width)).SetTooltip("Set the X position of Menu"));
+
+
             var QuickcastSpells = new Menu("Quick Cast Spells", "Quick Cast Spells");
+
             Menu.AddSubMenu(QuickcastSpells);
+
+
             QuickcastSpells.AddItem(new MenuItem("Enable Quick Spells", "Enable Quick Spells").SetValue(true).SetTooltip("Enable/Disable instant cast spell using key. Reload script after set this option."));
             QuickcastSpells.AddItem(new MenuItem("ColdSnap", "Cold Snap").SetValue(new KeyBind('1', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
             QuickcastSpells.AddItem(new MenuItem("Forge Spirit", "Forge Spirit").SetValue(new KeyBind('2', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
@@ -69,19 +74,24 @@ namespace InvokerNinja
             QuickcastSpells.AddItem(new MenuItem("Icewall", "Icewall").SetValue(new KeyBind('8', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
             QuickcastSpells.AddItem(new MenuItem("Ghostwalk", "Ghostwalk").SetValue(new KeyBind('9', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
             QuickcastSpells.AddItem(new MenuItem("Defeaning blast", "Defeaning blast").SetValue(new KeyBind('0', KeyBindType.Press)).Show(Menu.Item("Enable Quick Spells").GetValue<bool>()));
+
             var orbmenu = new Menu("OrbChanging", "Orb Menu");
             Menu.AddSubMenu(SunstrikeMenu);
             Menu.AddSubMenu(orbmenu);
+
             orbmenu.AddItem(new MenuItem("Enable OrbChanging", "Enable OrbChanging").SetValue(true).SetTooltip("Enable/Disable automatic orb Changing."));
             orbmenu.AddItem(new MenuItem("quas threshold health", "Quas Threshold Health").SetValue(new Slider(90, 1, 100)).SetTooltip("Percentage of HP threshold to change orbs for quas while not attacking."));
+
             SunstrikeMenu.AddItem(new MenuItem("Enable AutoSunstrike", "Enable AutoSunstrike").SetValue(true));
             SunstrikeMenu.AddItem(new MenuItem("Sunstrike Onlywhensafe", "Sunstrike Onlywhensafe").SetValue(true).SetTooltip("Just send sunstrike when is safe (target stunned,euls timing, skills timing..)."));
             SunstrikeMenu.AddItem(new MenuItem("Sunstrike Always When Disabled", "Sunstrike Always When Disabled").SetValue(true).SetTooltip("It will always send sunstrike when target has minus health than minimum amount of health configured."));
             SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig", "Sunstrike Delay").SetValue(new Slider(600, 100, 3000)).SetTooltip("Wait enemy walk in straight line delay. It will make sunstrike more accurate."));
             SunstrikeMenu.AddItem(new MenuItem("sunstrike.timeconfig2", "First Vision Delay").SetValue(new Slider(2500, 500, 3000)).SetTooltip("Time to wait before start to calculate sunstrike.(it's good because when target lose his HP he may change the place where he is going.)"));
             SunstrikeMenu.AddItem(new MenuItem("Minimum amount of health for sunstrike", "Minimum amount of health for sunstrike").SetValue(new Slider(300, 100, 1000)).SetTooltip("This value will be summed with sunstrike damage value."));
+
             Menu.AddItem(new MenuItem("orbwalk.minDistance", "Orbwalk min distance").SetValue(new Slider(250, 0, 700)).SetTooltip("the min distance to stop orbwalking and just auto attack."));
             Menu.AddToMainMenu();
+
             Game.OnWndProc += Exploding;
             Drawing.OnDraw += Target_esp;
             Game.OnUpdate += orb_checker;
@@ -97,20 +107,7 @@ namespace InvokerNinja
                 return;
             if (Game.IsKeyDown(Menu.Item("Flee Mode").GetValue<KeyBind>().Key) || Game.IsKeyDown(Menu.Item("Combo Mode").GetValue<KeyBind>().Key))
                 return;
-            if (Utils.SleepCheck("ORBSFIND"))
-            {
-                coldsnap = me.FindSpell("invoker_cold_snap");
-                forgespirit = me.FindSpell("invoker_forge_spirit");
-                meteor = me.FindSpell("invoker_chaos_meteor");
-                alacrity = me.FindSpell("invoker_alacrity");
-                tornado = me.FindSpell("invoker_tornado");
-                blast = me.FindSpell("invoker_deafening_blast");
-                sunstrike = me.FindSpell("invoker_sun_strike");
-                emp = me.FindSpell("invoker_emp");
-                icewall = me.FindSpell("invoker_ice_wall");
-                ghostwalk = me.FindSpell("invoker_ghost_walk");
-                Utils.Sleep(500, "ORBSFIND");
-            }
+            Find_skillsAndItens();
             if (Menu.Item("Enable Quick Spells").GetValue<bool>())
             {
                 if (Game.IsKeyDown(Menu.Item("ColdSnap").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
@@ -164,43 +161,7 @@ namespace InvokerNinja
                         InvokeSkill(blast);
                 }
             }
-            if (Utils.SleepCheck("ORBSFIND2"))
-            {
-                quas = me.Spellbook.SpellQ;
-                wex = me.Spellbook.SpellW;
-                exort = me.Spellbook.SpellE;
-                Utils.Sleep(250, "ORBSFIND2");
-            }
-            if (me.Level <= 6)
-            {
-                if (quas.Level >= 2)
-                    quas_level = true;
-                else
-                    quas_level = false;
-                if (wex.Level >= 2)
-                    wex_level = true;
-                else
-                    wex_level = false;
-                if (exort.Level >= 2)
-                    exort_level = true;
-                else
-                    exort_level = false;
-            }
-            else if (me.Level <= 25)
-            {
-                if (quas.Level >= 4)
-                    quas_level = true;
-                else
-                    quas_level = false;
-                if (wex.Level >= 4)
-                    wex_level = true;
-                else
-                    wex_level = false;
-                if (exort.Level >= 4)
-                    exort_level = true;
-                else
-                    exort_level = false;
-            }
+            level_checker();
             if (me.CanCast() && !me.IsChanneling() && !me.UnitState.HasFlag(UnitState.Invisible) && Utils.SleepCheck("KEYPRESSED") && Menu.Item("Enable OrbChanging").GetValue<bool>())
             {
                 if ((me.NetworkActivity.HasFlag(NetworkActivity.Attack) || me.NetworkActivity.HasFlag(NetworkActivity.Attack2) || me.NetworkActivity.HasFlag(NetworkActivity.AttackEvent)) && ((me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && exort_level) || (me.Modifiers.Count(x => x.Name.Contains("wex")) < 3 && wex_level)) && Utils.SleepCheck("orbchange"))
@@ -233,12 +194,6 @@ namespace InvokerNinja
             if (Menu.Item("Enable AutoSunstrike").GetValue<bool>() && !me.IsChanneling() && !me.IsInvisible())
             {
                 currenttickcount = Environment.TickCount - starttickcount;
-                if (Utils.SleepCheck("Sunstrikefinder"))
-                {
-                    sunstrike = me.FindSpell("invoker_sun_strike");
-                    invoke = me.Spellbook.SpellR;
-                    Utils.Sleep(300, "Sunstrikefinder");
-                }
                 var Sunstrikedamage = 100 + ((exort.Level - 1) * 62.5);
                 if (me.AghanimState())
                     Sunstrikedamage += 62.5;
@@ -348,25 +303,12 @@ namespace InvokerNinja
             {
                 if (Game.IsKeyDown(keyCode: i))
                 {
-                    Utils.Sleep(2000, "KEYPRESSED");
+                    Utils.Sleep(1000, "KEYPRESSED");
                 }
             }
             if (Game.IsKeyDown(Menu.Item("Flee Mode").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
             {
-                if (Utils.SleepCheck("ORBSFIND"))
-                {
-                    quas = me.Spellbook.SpellQ;
-                    wex = me.Spellbook.SpellW;
-                    exort = me.Spellbook.SpellE;
-                    invoke = me.Spellbook.SpellR;
-                    coldsnap = me.FindSpell("invoker_cold_snap");
-                    tornado = me.FindSpell("invoker_tornado");
-                    blast = me.FindSpell("invoker_deafening_blast");
-                    icewall = me.FindSpell("invoker_ice_wall");
-                    ghostwalk = me.FindSpell("invoker_ghost_walk");
-                    eul = me.FindItem("item_cyclone");
-                    Utils.Sleep(250, "ORBSFIND");
-                }
+                Find_skillsAndItens();
                 if (me.CanMove() || me.CanCast())
                 {
                     nextskillflee = NextSkillFlee();
@@ -374,30 +316,33 @@ namespace InvokerNinja
                     {
                         if (!Iscasted(ghostwalk) && invoke.CanBeCasted() && Utils.SleepCheck("ghostcast"))
                         {
-                            quas.UseAbility(false);
-                            quas.UseAbility(false);
-                            wex.UseAbility(false);
-                            invoke.UseAbility(false);
+                            InvokeSkill(ghostwalk);
                             Utils.Sleep(250, "ghostcast");
                         }
-                        if ((me.Health / (float)me.MaximumHealth) <= 0.5)
+                        if (!me.HasModifier("modifier_invoker_ghost_walk_self") && Utils.SleepCheck("ORBGHOST") && !me.IsInvisible() && Utils.SleepCheck("Ghostwalk_usage"))
                         {
-                            if (!me.HasModifier("modifier_invoker_ghost_walk_self") && me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && quas.Level > 0 && Utils.SleepCheck("ORBGHOST"))
+                            if ((me.Health / (float)me.MaximumHealth) <= 0.5)
                             {
-                                orb_type(quas);
-                                Utils.Sleep(250, "ORBGHOST");
+                                if (me.Modifiers.Count(x => x.Name.Contains("quas")) < 4 && quas.Level > 0)
+                                {
+                                    orb_type(quas);
+                                    Utils.Sleep(250, "ORBGHOST");
+                                }
+                            }
+                            else
+                            {
+                                if (me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && wex.Level > 0)
+                                {
+                                    orb_type(wex);
+                                    Utils.Sleep(250, "ORBGHOST");
+                                }
+                            }
+                            if (Utils.SleepCheck("ORBGHOST") && (me.Modifiers.Count(x => x.Name.Contains("wex")) >= 4 || me.Modifiers.Count(x => x.Name.Contains("quas")) >= 4) && Iscasted(ghostwalk))
+                            {
+                                ghostwalk.UseAbility(false);
+                                Utils.Sleep(250, "Ghostwalk_usage");
                             }
                         }
-                        else
-                        {
-                            if (!me.HasModifier("modifier_invoker_ghost_walk_self") && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && wex.Level > 0 && Utils.SleepCheck("ORBGHOST"))
-                            {
-                                orb_type(wex);
-                                Utils.Sleep(250, "ORBGHOST");
-                            }
-                        }
-                        if (Utils.SleepCheck("ORBGHOST") && (me.Modifiers.Count(x => x.Name.Contains("wex")) >= 4 || me.Modifiers.Count(x => x.Name.Contains("quas")) >= 4) && Iscasted(ghostwalk))
-                            ghostwalk.UseAbility(false);
                     }
                     if (Utils.SleepCheck("movingnow"))
                     {
@@ -407,41 +352,16 @@ namespace InvokerNinja
                 }
             }
             if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 0 && Game.IsKeyDown(Menu.Item("Target Select").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
+            {
                 target = me.ClosestToMouseTarget(1000);
+                SaveSelectedTargetName = target.Name;
+            }
             if (Game.IsKeyDown(Menu.Item("Combo Mode").GetValue<KeyBind>().Key) && !Game.IsChatOpen)
             {
-                if (Utils.SleepCheck("ORBSFIND"))
-                {
-                    quas = me.Spellbook.SpellQ;
-                    wex = me.Spellbook.SpellW;
-                    exort = me.Spellbook.SpellE;
-                    invoke = me.Spellbook.SpellR;
-                    coldsnap = me.FindSpell("invoker_cold_snap");
-                    forgespirit = me.FindSpell("invoker_forge_spirit");
-                    meteor = me.FindSpell("invoker_chaos_meteor");
-                    alacrity = me.FindSpell("invoker_alacrity");
-                    tornado = me.FindSpell("invoker_tornado");
-                    blast = me.FindSpell("invoker_deafening_blast");
-                    sunstrike = me.FindSpell("invoker_sun_strike");
-                    emp = me.FindSpell("invoker_emp");
-                    icewall = me.FindSpell("invoker_ice_wall");
-                    ghostwalk = me.FindSpell("invoker_ghost_walk");
-                    eul = me.FindItem("item_cyclone");
-                    medallion = me.FindItem("item_medallion_of_courage");
-                    solar_crest = me.FindItem("item_solar_crest");
-                    malevolence = me.FindItem("item_orchid");
-                    vyse = me.FindItem("item_sheepstick");
-                    bloodthorn = me.FindItem("item_bloodthorn");
-                    urn = me.FindItem("item_urn_of_shadows");
-                    refresher = me.FindItem("item_refresher");
-                    ethereal = me.FindItem("item_ethereal_blade");
-                    dagon = me.Inventory.Items.FirstOrDefault(x => x.Name.Contains("item_dagon"));
-                    Utils.Sleep(500, "ORBSFIND");
-                }
+                Find_skillsAndItens();
                 if (Menu.Item("Target Type: ").GetValue<StringList>().SelectedIndex == 0)
                 {
-                    if (target != null && (!target.IsAlive || target.IsIllusion || distance_me_target > 3000 || !target.IsVisible))
-                        target = null;
+                        target = ObjectManager.GetEntities<Hero>().FirstOrDefault(x => x.IsAlive && !x.IsIllusion && x.Distance2D(me) < 3000 && x.IsVisible && x.Name == SaveSelectedTargetName);
                     if (target == null)
                         target = me.BestAATarget(1000);
                 }
@@ -449,7 +369,6 @@ namespace InvokerNinja
                     target = me.ClosestToMouseTarget(1000);
                 if (target != null && target.IsValid && !target.IsIllusion)
                 {
-                    //Console.WriteLine(target.Modifiers.LastOrDefault().Name);
                     if (Utils.SleepCheck("Variable Checker"))
                     {
                         distance_me_target = target.NetworkPosition.Distance2D(me.NetworkPosition);
@@ -464,67 +383,7 @@ namespace InvokerNinja
                         target_sunstrike_ontiming = IsOnTiming(sunstrike, null);
                         Utils.Sleep(200, "Variable Checker");
                     }
-                    //quas, wex, exort checker
-                    if (me.Level <= 6)
-                    {
-                        if (quas.Level >= 2)
-                            quas_level = true;
-                        else
-                            quas_level = false;
-                        if (wex.Level >= 2)
-                            wex_level = true;
-                        else
-                            wex_level = false;
-                        if (exort.Level >= 2)
-                            exort_level = true;
-                        else
-                            exort_level = false;
-                    }
-                    else if (me.Level <= 10)
-                    {
-                        if (quas.Level >= 3)
-                            quas_level = true;
-                        else
-                            quas_level = false;
-                        if (wex.Level >= 3)
-                            wex_level = true;
-                        else
-                            wex_level = false;
-                        if (exort.Level >= 3)
-                            exort_level = true;
-                        else
-                            exort_level = false;
-                    }
-                    else if (me.Level <= 15)
-                    {
-                        if (quas.Level >= 4)
-                            quas_level = true;
-                        else
-                            quas_level = false;
-                        if (wex.Level >= 4)
-                            wex_level = true;
-                        else
-                            wex_level = false;
-                        if (exort.Level >= 4)
-                            exort_level = true;
-                        else
-                            exort_level = false;
-                    }
-                    else if (me.Level <= 25)
-                    {
-                        if (quas.Level >= 5)
-                            quas_level = true;
-                        else
-                            quas_level = false;
-                        if (wex.Level >= 5)
-                            wex_level = true;
-                        else
-                            wex_level = false;
-                        if (exort.Level >= 5)
-                            exort_level = true;
-                        else
-                            exort_level = false;
-                    }
+                    level_checker();
                     if ((quas.Level > 0 || wex.Level > 0 || exort.Level > 0) && invoke.Level >= 1)
                     {
                         if (IsComboPrepared() != 0 || comboing)
@@ -547,14 +406,7 @@ namespace InvokerNinja
                             }
                             if (combonumber == 1)
                             {
-                                if (Utils.SleepCheck("orbwalker"))
-                                {
-                                    if (me.Distance2D(target) >= OrbMinDist)
-                                        Orbwalking.Orbwalk(target);
-                                    else
-                                        me.Attack(target, false);
-                                    Utils.Sleep(200, "orbwalker");
-                                }
+                                AttackTarget();
                                 if (eul.CanBeCasted() && Utils.SleepCheck("eul") && sunstrike.Cooldown == 0 && meteor.Cooldown == 0 && !target_meteor_ontiming && !target_sunstrike_ontiming)
                                 {
                                     eul.UseAbility(target, false);
@@ -597,14 +449,7 @@ namespace InvokerNinja
                                 bool invokecd = ((invoke.Level == 4 && me.AghanimState()) || ((invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState()));
                                 if (refresher_use == false)
                                 {
-                                    if (Utils.SleepCheck("orbwalker"))
-                                    {
-                                        if (me.Distance2D(target) >= OrbMinDist)
-                                            Orbwalking.Orbwalk(target);
-                                        else
-                                            me.Attack(target, false);
-                                        Utils.Sleep(200, "orbwalker");
-                                    }
+                                    AttackTarget();
                                     if (tornado.Cooldown == 0)
                                     {
                                         InvokeSkill(tornado);
@@ -628,49 +473,7 @@ namespace InvokerNinja
                                     }
                                     if (invokecd && exort_level)
                                     {
-                                        if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
-                                        {
-                                            ethereal.UseAbility(target, false);
-                                            Utils.Sleep(250, "Ethereal");
-                                        }
-                                        if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
-                                        {
-                                            dagon.UseAbility(target, false);
-                                            Utils.Sleep(250, "Dagon");
-                                        }
-                                        if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
-                                        {
-                                            medallion.UseAbility(target, false);
-                                            Utils.Sleep(500, "medallion");
-                                        }
-                                        if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
-                                        {
-                                            solar_crest.UseAbility(target, false);
-                                            Utils.Sleep(500, "crest");
-                                        }
-                                        if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            malevolence.UseAbility(target, false);
-                                            Utils.Sleep(500, "male");
-                                            Utils.Sleep(5000, "malepop");
-                                        }
-                                        if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            vyse.UseAbility(target, false);
-                                            Utils.Sleep(500, "vyse");
-                                            Utils.Sleep(3500, "vysepop");
-                                        }
-                                        if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            bloodthorn.UseAbility(target, false);
-                                            Utils.Sleep(500, "blood");
-                                            Utils.Sleep(5000, "bloodpop");
-                                        }
-                                        if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            urn.UseAbility(target, false);
-                                            Utils.Sleep(800, "urn");
-                                        }
+                                        Use_Item("ALL");
                                         if (meteor.Cooldown == 0 && emp.Cooldown > 0 && tornado.Cooldown > 0)
                                         {
                                             InvokeSkill(meteor);
@@ -752,49 +555,7 @@ namespace InvokerNinja
                                         refresher.UseAbility(false);
                                         Utils.Sleep(250, "Refresher usage");
                                     }
-                                    if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
-                                    {
-                                        ethereal.UseAbility(target, false);
-                                        Utils.Sleep(250, "Ethereal");
-                                    }
-                                    if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
-                                    {
-                                        dagon.UseAbility(target, false);
-                                        Utils.Sleep(250, "Dagon");
-                                    }
-                                    if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
-                                    {
-                                        medallion.UseAbility(target, false);
-                                        Utils.Sleep(500, "medallion");
-                                    }
-                                    if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
-                                    {
-                                        solar_crest.UseAbility(target, false);
-                                        Utils.Sleep(500, "crest");
-                                    }
-                                    if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        malevolence.UseAbility(target, false);
-                                        Utils.Sleep(500, "male");
-                                        Utils.Sleep(5000, "malepop");
-                                    }
-                                    if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        vyse.UseAbility(target, false);
-                                        Utils.Sleep(500, "vyse");
-                                        Utils.Sleep(3500, "vysepop");
-                                    }
-                                    if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        bloodthorn.UseAbility(target, false);
-                                        Utils.Sleep(500, "blood");
-                                        Utils.Sleep(5000, "bloodpop");
-                                    }
-                                    if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        urn.UseAbility(target, false);
-                                        Utils.Sleep(800, "urn");
-                                    }
+                                    Use_Item("ALL");
                                     if (meteor.Cooldown == 0)
                                     {
                                         InvokeSkill(meteor);
@@ -824,14 +585,7 @@ namespace InvokerNinja
                                 bool invokecd = ((invoke.Level == 4 && me.AghanimState()) || ((invoke.Level >= 3 && me.FindItem("item_octarine_core") != null) && me.AghanimState()));
                                 if (refresher_use == false)
                                 {
-                                    if (Utils.SleepCheck("orbwalker"))
-                                    {
-                                        if (me.Distance2D(target) >= OrbMinDist)
-                                            Orbwalking.Orbwalk(target);
-                                        else
-                                            me.Attack(target, false);
-                                        Utils.Sleep(200, "orbwalker");
-                                    }
+                                    AttackTarget();
                                     if (tornado.Cooldown == 0)
                                     {
                                         InvokeSkill(tornado);
@@ -889,49 +643,7 @@ namespace InvokerNinja
                                                 }
                                             }
                                         }
-                                        if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
-                                        {
-                                            ethereal.UseAbility(target, false);
-                                            Utils.Sleep(250, "Ethereal");
-                                        }
-                                        if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
-                                        {
-                                            dagon.UseAbility(target, false);
-                                            Utils.Sleep(250, "Dagon");
-                                        }
-                                        if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
-                                        {
-                                            medallion.UseAbility(target, false);
-                                            Utils.Sleep(500, "medallion");
-                                        }
-                                        if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
-                                        {
-                                            solar_crest.UseAbility(target, false);
-                                            Utils.Sleep(500, "crest");
-                                        }
-                                        if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            malevolence.UseAbility(target, false);
-                                            Utils.Sleep(500, "male");
-                                            Utils.Sleep(5000, "malepop");
-                                        }
-                                        if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            vyse.UseAbility(target, false);
-                                            Utils.Sleep(500, "vyse");
-                                            Utils.Sleep(3500, "vysepop");
-                                        }
-                                        if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            bloodthorn.UseAbility(target, false);
-                                            Utils.Sleep(500, "blood");
-                                            Utils.Sleep(5000, "bloodpop");
-                                        }
-                                        if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
-                                        {
-                                            urn.UseAbility(target, false);
-                                            Utils.Sleep(800, "urn");
-                                        }
+                                        Use_Item("ALL");
                                         if (blast.Cooldown > 0 && sunstrike.Cooldown > 0 && Utils.SleepCheck("refreshertimer") && (dagon == null || !dagon.CanBeCasted()) && (ethereal == null || !ethereal.CanBeCasted()))
                                         {
                                             if ((refresher == null || !refresher.CanBeCasted() || me.Mana < refresher.ManaCost + sunstrike.ManaCost + blast.ManaCost))
@@ -980,49 +692,7 @@ namespace InvokerNinja
                                         refresher.UseAbility(false);
                                         Utils.Sleep(250, "Refresher usage");
                                     }
-                                    if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
-                                    {
-                                        ethereal.UseAbility(target, false);
-                                        Utils.Sleep(250, "Ethereal");
-                                    }
-                                    if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
-                                    {
-                                        dagon.UseAbility(target, false);
-                                        Utils.Sleep(250, "Dagon");
-                                    }
-                                    if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
-                                    {
-                                        medallion.UseAbility(target, false);
-                                        Utils.Sleep(500, "medallion");
-                                    }
-                                    if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
-                                    {
-                                        solar_crest.UseAbility(target, false);
-                                        Utils.Sleep(500, "crest");
-                                    }
-                                    if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        malevolence.UseAbility(target, false);
-                                        Utils.Sleep(500, "male");
-                                        Utils.Sleep(5000, "malepop");
-                                    }
-                                    if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        vyse.UseAbility(target, false);
-                                        Utils.Sleep(500, "vyse");
-                                        Utils.Sleep(3500, "vysepop");
-                                    }
-                                    if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        bloodthorn.UseAbility(target, false);
-                                        Utils.Sleep(500, "blood");
-                                        Utils.Sleep(5000, "bloodpop");
-                                    }
-                                    if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
-                                    {
-                                        urn.UseAbility(target, false);
-                                        Utils.Sleep(800, "urn");
-                                    }
+                                    Use_Item("ALL");
                                     if (sunstrike.Cooldown == 0)
                                     {
                                         InvokeSkill(sunstrike);
@@ -1152,57 +822,14 @@ namespace InvokerNinja
                         }
                     }
                     //itens
-                    if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
-                    {
-                        medallion.UseAbility(target, false);
-                        Utils.Sleep(500, "medallion");
-                    }
-                    if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
-                    {
-                        solar_crest.UseAbility(target, false);
-                        Utils.Sleep(500, "crest");
-                    }
-                    if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
-                    {
-                        malevolence.UseAbility(target, false);
-                        Utils.Sleep(500, "male");
-                        Utils.Sleep(5000, "malepop");
-                    }
-                    if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
-                    {
-                        vyse.UseAbility(target, false);
-                        Utils.Sleep(500, "vyse");
-                        Utils.Sleep(3500, "vysepop");
-                    }
-                    if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
-                    {
-                        bloodthorn.UseAbility(target, false);
-                        Utils.Sleep(500, "blood");
-                        Utils.Sleep(5000, "bloodpop");
-                    }
-                    if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
-                    {
-                        urn.UseAbility(target, false);
-                        Utils.Sleep(800, "urn");
-                    }
-                    if (Utils.SleepCheck("orbwalker"))
-                    {
-                        if (exort_level && me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && Utils.SleepCheck("orbchange"))
-                        {
-                            orb_type(exort);
-                            Utils.Sleep(800, "orbchange");
-                        }
-                        else if (wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
-                        {
-                            orb_type(wex);
-                            Utils.Sleep(900, "orbchange");
-                        }
-                        if (me.Distance2D(target) >= OrbMinDist)
-                            Orbwalking.Orbwalk(target);
-                        else
-                            me.Attack(target, false);
-                        Utils.Sleep(200, "orbwalker");
-                    }
+                    Use_Item(medallion);
+                    Use_Item(solar_crest);
+                    Use_Item(malevolence);
+                    Use_Item(vyse);
+                    Use_Item(bloodthorn);
+                    Use_Item(urn);
+                    Use_Item(medallion);
+                    AttackTarget();
                     if (myunits != null)
                     {
                         foreach (Unit unit in myunits)
@@ -1253,14 +880,6 @@ namespace InvokerNinja
         }
         private static bool IsOnTiming(Ability skill, Hero Enemy)
         {
-            if (Utils.SleepCheck("SkillNamesFinder"))
-            {
-                meteor = me.FindSpell("invoker_chaos_meteor");
-                blast = me.FindSpell("invoker_deafening_blast");
-                sunstrike = me.FindSpell("invoker_sun_strike");
-                emp = me.FindSpell("invoker_emp");
-                Utils.Sleep(250, "SkillNamesFinder");
-            }
             if (Enemy == null)
                 Enemy = target;
             Single distance_me_target_2 = Enemy.NetworkPosition.Distance2D(me.NetworkPosition);
@@ -1466,67 +1085,7 @@ namespace InvokerNinja
                     return 10;
                 if (Iscasted(emp) && emp.CanBeCasted() && (target.MovementSpeed <= 190 || target_emp_ontiming) && distance_me_target <= 700)
                     return 8;
-                //quas, wex, exort checker
-                if (me.Level <= 6)
-                {
-                    if (quas.Level >= 2)
-                        quas_level = true;
-                    else
-                        quas_level = false;
-                    if (wex.Level >= 2)
-                        wex_level = true;
-                    else
-                        wex_level = false;
-                    if (exort.Level >= 2)
-                        exort_level = true;
-                    else
-                        exort_level = false;
-                }
-                else if (me.Level <= 10)
-                {
-                    if (quas.Level >= 3)
-                        quas_level = true;
-                    else
-                        quas_level = false;
-                    if (wex.Level >= 3)
-                        wex_level = true;
-                    else
-                        wex_level = false;
-                    if (exort.Level >= 3)
-                        exort_level = true;
-                    else
-                        exort_level = false;
-                }
-                else if (me.Level <= 15)
-                {
-                    if (quas.Level >= 4)
-                        quas_level = true;
-                    else
-                        quas_level = false;
-                    if (wex.Level >= 4)
-                        wex_level = true;
-                    else
-                        wex_level = false;
-                    if (exort.Level >= 4)
-                        exort_level = true;
-                    else
-                        exort_level = false;
-                }
-                else if (me.Level <= 25)
-                {
-                    if (quas.Level >= 5)
-                        quas_level = true;
-                    else
-                        quas_level = false;
-                    if (wex.Level >= 5)
-                        wex_level = true;
-                    else
-                        wex_level = false;
-                    if (exort.Level >= 5)
-                        exort_level = true;
-                    else
-                        exort_level = false;
-                }
+                level_checker();
                 //skills sequence
                 if (quas_level && me.Mana >= coldsnap.ManaCost + invoke.ManaCost && coldsnap.Cooldown == 0 && (distance_me_target <= 750 || (me.MovementSpeed >= target.MovementSpeed + 30 && distance_me_target <= 900)) && !target_isinvul && !target_magic_imune && quas.Level > 0)
                     return 1;
@@ -1586,22 +1145,6 @@ namespace InvokerNinja
         {
             if (skill == null) return;
             if (!Utils.SleepCheck("PINGCANCEL")) return;
-            //quas, wex, exort, invoke, coldsnap, meteor, alacrity, tornado, forgespirit, blast, sunstrike, emp, icewall, ghostwalk;
-            if (Utils.SleepCheck("SkillNamesFinder2"))
-            {
-                invoke = me.Spellbook.SpellR;
-                coldsnap = me.FindSpell("invoker_cold_snap");
-                forgespirit = me.FindSpell("invoker_forge_spirit");
-                meteor = me.FindSpell("invoker_chaos_meteor");
-                alacrity = me.FindSpell("invoker_alacrity");
-                tornado = me.FindSpell("invoker_tornado");
-                blast = me.FindSpell("invoker_deafening_blast");
-                sunstrike = me.FindSpell("invoker_sun_strike");
-                emp = me.FindSpell("invoker_emp");
-                icewall = me.FindSpell("invoker_ice_wall");
-                ghostwalk = me.FindSpell("invoker_ghost_walk");
-                Utils.Sleep(200, "SkillNamesFinder2");
-            }
             if (skill.Name == coldsnap.Name)
             {
                 if (!Iscasted(skill) && invoke.CanBeCasted())
@@ -1762,6 +1305,210 @@ namespace InvokerNinja
                 return true;
             else
                 return false;
+        }
+        private static void AttackTarget()
+        {
+            if (Utils.SleepCheck("orbwalker"))
+            {
+                if (me.Distance2D(target) >= OrbMinDist)
+                {
+                    Orbwalking.Orbwalk(target);
+                    if (exort_level && me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && Utils.SleepCheck("orbchange"))
+                    {
+                        orb_type(exort);
+                        Utils.Sleep(800, "orbchange");
+                    }
+                    else if (wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+                    {
+                        orb_type(wex);
+                        Utils.Sleep(800, "orbchange");
+                    }
+                }
+                else
+                {
+                    me.Attack(target, false);
+                    if (exort_level && me.Modifiers.Count(x => x.Name.Contains("exort")) < 4 && Utils.SleepCheck("orbchange"))
+                    {
+                        orb_type(exort);
+                        Utils.Sleep(800, "orbchange");
+                    }
+                    else if (wex_level && me.Modifiers.Count(x => x.Name.Contains("wex")) < 4 && Utils.SleepCheck("orbchange"))
+                    {
+                        orb_type(wex);
+                        Utils.Sleep(800, "orbchange");
+                    }
+                }
+                Utils.Sleep(250, "orbwalker");
+            }
+        }
+        private static void Find_skillsAndItens()
+        {
+            if (Utils.SleepCheck("ORBSFIND"))
+            {
+                quas = me.Spellbook.SpellQ;
+                wex = me.Spellbook.SpellW;
+                exort = me.Spellbook.SpellE;
+                invoke = me.Spellbook.SpellR;
+                coldsnap = me.FindSpell("invoker_cold_snap");
+                forgespirit = me.FindSpell("invoker_forge_spirit");
+                meteor = me.FindSpell("invoker_chaos_meteor");
+                alacrity = me.FindSpell("invoker_alacrity");
+                tornado = me.FindSpell("invoker_tornado");
+                blast = me.FindSpell("invoker_deafening_blast");
+                sunstrike = me.FindSpell("invoker_sun_strike");
+                emp = me.FindSpell("invoker_emp");
+                icewall = me.FindSpell("invoker_ice_wall");
+                ghostwalk = me.FindSpell("invoker_ghost_walk");
+                eul = me.FindItem("item_cyclone");
+                medallion = me.FindItem("item_medallion_of_courage");
+                solar_crest = me.FindItem("item_solar_crest");
+                malevolence = me.FindItem("item_orchid");
+                vyse = me.FindItem("item_sheepstick");
+                bloodthorn = me.FindItem("item_bloodthorn");
+                urn = me.FindItem("item_urn_of_shadows");
+                refresher = me.FindItem("item_refresher");
+                ethereal = me.FindItem("item_ethereal_blade");
+                dagon = me.Inventory.Items.FirstOrDefault(x => x.Name.Contains("item_dagon"));
+                Utils.Sleep(500, "ORBSFIND");
+            }
+        }
+        private static void Use_Item(dynamic Item_Name)
+        {
+            if (Item_Name == null) return;
+            if(!(Item_Name is Item || Item_Name is string)) throw new ArgumentException("INVALID PARAMETERS! => Item_Name isn't a valid parameter.","Item_Name");
+            if (Item_Name is Item) Item_Name = Item_Name.Name;
+            if ((ethereal != null  && Item_Name == ethereal.Name) || Item_Name == "ALL")
+            {
+                if (ethereal != null && ethereal.CanBeCasted() && Utils.SleepCheck("Ethereal") && Utils.SleepCheck("cd_tornado_a"))
+                {
+                    ethereal.UseAbility(target, false);
+                    Utils.Sleep(250, "Ethereal");
+                }
+            }
+            if ((dagon != null && Item_Name == dagon.Name) || Item_Name == "ALL")
+            {
+                if (dagon != null && dagon.CanBeCasted() && Utils.SleepCheck("Dagon") && Utils.SleepCheck("cd_tornado_a"))
+                {
+                    dagon.UseAbility(target, false);
+                    Utils.Sleep(250, "Dagon");
+                }
+            }
+            if ((medallion!= null && Item_Name == medallion.Name) || Item_Name == "ALL")
+            {
+                if (medallion.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("medallion"))
+                {
+                    medallion.UseAbility(target, false);
+                    Utils.Sleep(500, "medallion");
+                }
+            }
+            if ((solar_crest != null && Item_Name == solar_crest.Name) || Item_Name == "ALL")
+            {
+                if (solar_crest.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("crest"))
+                {
+                    solar_crest.UseAbility(target, false);
+                    Utils.Sleep(500, "crest");
+                }
+            }
+            if ((malevolence != null && Item_Name == malevolence.Name) || Item_Name == "ALL")
+            {
+                if (malevolence.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("male") && !(IsComboPrepared() != 0 || comboing))
+                {
+                    malevolence.UseAbility(target, false);
+                    Utils.Sleep(500, "male");
+                    Utils.Sleep(5000, "malepop");
+                }
+            }
+            if ((vyse != null && Item_Name == vyse.Name) || Item_Name == "ALL")
+            {
+                if (vyse.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("vyse") && !(IsComboPrepared() != 0 || comboing))
+                {
+                    vyse.UseAbility(target, false);
+                    Utils.Sleep(500, "vyse");
+                    Utils.Sleep(3500, "vysepop");
+                }
+            }
+            if ((bloodthorn != null && Item_Name == bloodthorn.Name) || Item_Name == "ALL")
+            {
+                if (bloodthorn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("blood") && !(IsComboPrepared() != 0 || comboing))
+                {
+                    bloodthorn.UseAbility(target, false);
+                    Utils.Sleep(500, "blood");
+                    Utils.Sleep(5000, "bloodpop");
+                }
+            }
+            if ((urn != null && Item_Name == urn.Name) || Item_Name == "ALL")
+            {
+                if (urn.CanBeCasted() && !target_magic_imune && !target_isinvul && Utils.SleepCheck("urn") && !(IsComboPrepared() != 0 || comboing))
+                {
+                    urn.UseAbility(target, false);
+                    Utils.Sleep(800, "urn");
+                }
+            }
+            return;
+        }
+        private static void level_checker()
+        {
+            //quas, wex, exort checker
+            if (me.Level <= 6)
+            {
+                if (quas.Level >= 2)
+                    quas_level = true;
+                else
+                    quas_level = false;
+                if (wex.Level >= 2)
+                    wex_level = true;
+                else
+                    wex_level = false;
+                if (exort.Level >= 2)
+                    exort_level = true;
+                else
+                    exort_level = false;
+            }
+            else if (me.Level <= 10)
+            {
+                if (quas.Level >= 3)
+                    quas_level = true;
+                else
+                    quas_level = false;
+                if (wex.Level >= 3)
+                    wex_level = true;
+                else
+                    wex_level = false;
+                if (exort.Level >= 3)
+                    exort_level = true;
+                else
+                    exort_level = false;
+            }
+            else if (me.Level <= 15)
+            {
+                if (quas.Level >= 4)
+                    quas_level = true;
+                else
+                    quas_level = false;
+                if (wex.Level >= 4)
+                    wex_level = true;
+                else
+                    wex_level = false;
+                if (exort.Level >= 4)
+                    exort_level = true;
+                else
+                    exort_level = false;
+            }
+            else if (me.Level <= 25)
+            {
+                if (quas.Level >= 5)
+                    quas_level = true;
+                else
+                    quas_level = false;
+                if (wex.Level >= 5)
+                    wex_level = true;
+                else
+                    wex_level = false;
+                if (exort.Level >= 5)
+                    exort_level = true;
+                else
+                    exort_level = false;
+            }
         }
     }
 }
