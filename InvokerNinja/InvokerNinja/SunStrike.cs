@@ -37,12 +37,14 @@ namespace InvokerNinja
         private static float distance_me_target, targetisturning_delay = -777;
         private static ParticleEffect targetParticle;
         private static List<Unit> myunits;
-        // Update Version 1.0.0.13
-        // > Changed the way to get enemies position to get enemy network position to avoid missing sunstrikes.
-        // > Fixed Alacrity range usage.
-        // > Increased sunstrike accuracy ontimings.
-        // > Added turn time to calculations
-        // > Increased ghost walk speed.
+        // Update Version 1.0.0.14
+        // > Fixed error static targets prediction(missing sunstrike on not moving targets)
+        // > Fixed Combo sometimes wasn't working
+        // > Fixed Combo canceling
+        // Next updates:
+        // - Fix tornado usage(I recommend to use tornado by yourself script is missing so much, if you want to use is better be closer so script propably will not miss.)
+        // - Fix tornado on icewall
+        // - ADD more combos
         static void Main(string[] args)
         {
             Menu.AddItem(new MenuItem("Combo Mode", "Combo Mode").SetValue(new KeyBind('T', KeyBindType.Press)));
@@ -111,9 +113,9 @@ namespace InvokerNinja
             if (Game.IsKeyDown(Menu.Item("Flee Mode").GetValue<KeyBind>().Key) || Game.IsKeyDown(Menu.Item("Combo Mode").GetValue<KeyBind>().Key))
                 return;
             Find_skillsAndItens();
-            if(Menu.Item("Key +").GetValue<StringList>().SelectedIndex == 0)
+            if (Menu.Item("Key +").GetValue<StringList>().SelectedIndex == 0)
                 aditionalkey = 0;
-            else if(Menu.Item("Key +").GetValue<StringList>().SelectedIndex == 1)
+            else if (Menu.Item("Key +").GetValue<StringList>().SelectedIndex == 1)
                 aditionalkey = 16;
             else if (Menu.Item("Key +").GetValue<StringList>().SelectedIndex == 2)
                 aditionalkey = 18;
@@ -219,7 +221,10 @@ namespace InvokerNinja
                         if (sunstrike.Cooldown == 0 && (Iscasted(sunstrike) ? me.Mana > sunstrike.ManaCost : me.Mana > (sunstrike.ManaCost + invoke.ManaCost)) && invoke.CanBeCasted() && Utils.SleepCheck("cd_sunstrike"))
                         {
                             InvokeSkill(sunstrike, true);
-                            sunstrike.UseAbility(Prediction.PredictedXYZ(EnemykillablebySS, (float)(1700 / 3.4) + EnemykillablebySS.MovementSpeed), false);
+                            if (EnemykillablebySS.HasModifier("modifier_invoker_cold_snap"))
+                                sunstrike.UseAbility(Prediction.PredictedXYZ(EnemykillablebySS, (float)(1700 / 3.4) + EnemykillablebySS.MovementSpeed), false);
+                            else
+                                sunstrike.UseAbility(EnemykillablebySS.NetworkPosition, false);
                             Utils.Sleep(250, "cd_sunstrike");
                             Utils.Sleep(700, "cd_sunstrike_a");
                         }
@@ -229,7 +234,7 @@ namespace InvokerNinja
                         if (sunstrike.Cooldown == 0 && (Iscasted(sunstrike) ? me.Mana > sunstrike.ManaCost : me.Mana > (sunstrike.ManaCost + invoke.ManaCost)) && invoke.CanBeCasted() && Utils.SleepCheck("cd_sunstrike") && TargetIsTurning(EnemykillablebySS) && !EnemykillablebySS.IsInvul())
                         {
                             InvokeSkill(sunstrike, true);
-                            sunstrike.UseAbility(Prediction.PredictedXYZ(EnemykillablebySS, (float)(1700 / 1.2) + EnemykillablebySS.MovementSpeed), false);
+                            sunstrike.UseAbility(EnemykillablebySS.NetworkPosition, false);
                             Utils.Sleep(250, "cd_sunstrike");
                             Utils.Sleep(700, "cd_sunstrike_a");
                         }
@@ -884,9 +889,9 @@ namespace InvokerNinja
         {
             if (Iscasted(meteor) && (Iscasted(sunstrike) || !Utils.SleepCheck("cd_sunstrike_a")) && (sunstrike.Cooldown == 0 || !Utils.SleepCheck("cd_sunstrike_a")) && meteor.Cooldown == 0 && (me.FindItem("item_cyclone") != null || (target_meteor_ontiming && target_sunstrike_ontiming)))
                 return 1;
-            if (Iscasted(emp) && Iscasted(tornado) && emp.Cooldown == 0 && tornado.Cooldown == 0)
+            if (Iscasted(emp) && ((Iscasted(tornado) && tornado.Cooldown <= 5) || target.IsInvul()) && emp.Cooldown <= 5)
                 return 2;
-            if (Iscasted(meteor) && Iscasted(tornado) && meteor.Cooldown == 0 && tornado.Cooldown == 0)
+            if (Iscasted(meteor) && ((Iscasted(tornado) && tornado.Cooldown <= 5 ) || target.IsInvul()) && meteor.Cooldown <= 5)
                 return 3;
             return 0;
         }
